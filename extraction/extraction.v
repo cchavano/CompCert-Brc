@@ -23,6 +23,7 @@ Require Ctypes Csyntax Ctyping Clight.
 Require Compiler.
 Require Parser.
 Require Initializers.
+Require ClightFromCe.
 
 (* Standard lib *)
 From Coq Require Import ExtrOcamlBasic ExtrOcamlString.
@@ -104,6 +105,7 @@ Extract Constant Compopts.debug =>
   "fun _ -> !Clflags.option_g".
 
 (* Compiler *)
+Extract Constant Compiler.print_ClightCe => "PrintClightCe.print_if".
 Extract Constant Compiler.print_Clight => "PrintClight.print_if".
 Extract Constant Compiler.print_Cminor => "PrintCminor.print_if".
 Extract Constant Compiler.print_RTL => "PrintRTL.print_if".
@@ -139,7 +141,7 @@ Set Extraction AccessOpaque.
 Cd "extraction".
 
 Separate Extraction
-   Compiler.transf_c_program Compiler.transf_cminor_program
+   Compiler.transf_c_program Compiler.transf_cminor_program Compiler.transl_clightce_program
    Cexec.do_initial_state Cexec.do_step Cexec.at_final_state
    Ctypes.merge_attributes Ctypes.remove_attributes 
    Ctypes.build_composite_env Ctypes.layout_struct
@@ -150,6 +152,7 @@ Separate Extraction
    Ctyping.eselection
    Ctypes.make_program
    Clight.type_of_function
+   ClightFromCe.transl_program
    Conventions1.callee_save_type Conventions1.is_float_reg
    Conventions1.int_caller_save_regs Conventions1.float_caller_save_regs
    Conventions1.int_callee_save_regs Conventions1.float_callee_save_regs

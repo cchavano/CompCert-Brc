@@ -18,6 +18,7 @@ Require Import Coqlib Errors.
 Require Import AST Linking Smallstep.
 (** Languages (syntax and semantics). *)
 Require Ctypes Csyntax Csem Cstrategy Cexec.
+Require ClightFromCe.
 Require Clight.
 Require Csharpminor.
 Require Cminor.
@@ -30,6 +31,7 @@ Require Asm.
 (** Translation passes. *)
 Require Initializers.
 Require SimplExpr.
+Require ClightFromCe.
 Require SimplLocals.
 Require Cshmgen.
 Require Cminorgen.
@@ -74,6 +76,7 @@ Require Asmgenproof.
 Require Import Compopts.
 
 (** Pretty-printers (defined in Caml). *)
+Parameter print_ClightCe: ClightCe.program -> unit.
 Parameter print_Clight: Clight.program -> unit.
 Parameter print_Cminor: Cminor.program -> unit.
 Parameter print_RTL: Z -> RTL.program -> unit.
@@ -160,6 +163,13 @@ Definition transf_clight_program (p: Clight.program) : res Asm.program :=
   @@@ time "C#minor generation" Cshmgen.transl_program
   @@@ time "Cminor generation" Cminorgen.transl_program
   @@@ transf_cminor_program.
+
+Definition transl_clightce_program (p:ClightCe.program) : res Asm.program :=
+  OK p
+    @@ print print_ClightCe
+    @@@ time "Simplification of conditionals" ClightFromCe.transl_program
+    @@@ transf_clight_program.
+
 
 Definition transf_c_program (p: Csyntax.program) : res Asm.program :=
   OK p
