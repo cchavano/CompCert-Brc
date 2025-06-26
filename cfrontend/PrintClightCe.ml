@@ -20,10 +20,7 @@ open Format
 open Camlcoq
 open PrintAST
 open Ctypes
-open Cop
 open PrintCsyntax
-open Clight
-open PrintClight
 open ClightCe
 
 let precedence_cexpr = function
@@ -42,7 +39,7 @@ let rec cexpr p (prec,e) =
   then fprintf p "@[<hov 2>("
   else fprintf p "@[<hov 2>";
   begin match e with
-  | CE_expr e -> expr p (0,e)
+  | CE_expr e -> PrintClight.expr p (0,e)
   | CE_and(e1,e2) -> fprintf p "%a@ && %a" cexpr (prec1,e1) cexpr (prec2,e2)
   | CE_or(e1,e2) -> fprintf p "%a@ || %a" cexpr (prec1,e1) cexpr (prec2,e2)
   | CE_not e1 -> fprintf p "!%a" cexpr (prec',e1) 
@@ -58,27 +55,27 @@ let rec print_stmt p s =
   | Sskip ->
       fprintf p "/*skip*/;"
   | Sassign(e1, e2) ->
-      fprintf p "@[<hv 2>%a =@ %a;@]" print_expr e1 print_expr e2
+      fprintf p "@[<hv 2>%a =@ %a;@]" PrintClight.print_expr e1 PrintClight.print_expr e2
   | Sset(id, e2) ->
-      fprintf p "@[<hv 2>%s =@ %a;@]" (temp_name id) print_expr e2
+      fprintf p "@[<hv 2>%s =@ %a;@]" (PrintClight.temp_name id) PrintClight.print_expr e2
   | Scall(None, e1, el) ->
       fprintf p "@[<hv 2>%a@,(@[<hov 0>%a@]);@]"
-                expr (15, e1)
-                print_expr_list (true, el)
+                PrintClight.expr (15, e1)
+                PrintClight.print_expr_list (true, el)
   | Scall(Some id, e1, el) ->
       fprintf p "@[<hv 2>%s =@ %a@,(@[<hov 0>%a@]);@]"
-                (temp_name id)
-                expr (15, e1)
-                print_expr_list (true, el)
+                (PrintClight.temp_name id)
+                PrintClight.expr (15, e1)
+                PrintClight.print_expr_list (true, el)
   | Sbuiltin(None, ef, tyargs, el) ->
       fprintf p "@[<hv 2>builtin %s@,(@[<hov 0>%a@]);@]"
                 (name_of_external ef)
-                print_expr_list (true, el)
+                PrintClight.print_expr_list (true, el)
   | Sbuiltin(Some id, ef, tyargs, el) ->
       fprintf p "@[<hv 2>%s =@ builtin %s@,(@[<hov 0>%a@]);@]"
-                (temp_name id)
+                (PrintClight.temp_name id)
                 (name_of_external ef)
-                print_expr_list (true, el)
+                PrintClight.print_expr_list (true, el)
   | Ssequence(Sskip, s2) ->
       print_stmt p s2
   | Ssequence(s1, Sskip) ->
@@ -111,12 +108,12 @@ let rec print_stmt p s =
       fprintf p "continue;"
   | Sswitch(e, cases) ->
       fprintf p "@[<v 2>switch (%a) {@ %a@;<0 -2>}@]"
-              print_expr e
+              PrintClight.print_expr e
               print_cases cases
   | Sreturn None ->
       fprintf p "return;"
   | Sreturn (Some e) ->
-      fprintf p "return %a;" print_expr e
+      fprintf p "return %a;" PrintClight.print_expr e
   | Slabel(lbl, s1) ->
       fprintf p "%s:@ %a" (extern_atom lbl) print_stmt s1
   | Sgoto lbl ->
@@ -145,31 +142,31 @@ and print_stmt_for p s =
   | Sskip ->
       fprintf p "(void)0"
   | Sassign(e1, e2) ->
-      fprintf p "%a = %a" print_expr e1 print_expr e2
+      fprintf p "%a = %a" PrintClight.print_expr e1 PrintClight.print_expr e2
   | Sset(id, e2) ->
-      fprintf p "%s = %a" (temp_name id) print_expr e2
+      fprintf p "%s = %a" (PrintClight.temp_name id) PrintClight.print_expr e2
   | Ssequence(Sskip, s2) ->
       print_stmt_for p s2
   | Ssequence(s1, s2) ->
       fprintf p "%a, %a" print_stmt_for s1 print_stmt_for s2
   | Scall(None, e1, el) ->
       fprintf p "@[<hv 2>%a@,(@[<hov 0>%a@])@]"
-                expr (15, e1)
-                print_expr_list (true, el)
+                PrintClight.expr (15, e1)
+                PrintClight.print_expr_list (true, el)
   | Scall(Some id, e1, el) ->
       fprintf p "@[<hv 2>%s =@ %a@,(@[<hov 0>%a@])@]"
-                (temp_name id)
-                expr (15, e1)
-                print_expr_list (true, el)
+                (PrintClight.temp_name id)
+                PrintClight.expr (15, e1)
+                PrintClight.print_expr_list (true, el)
   | Sbuiltin(None, ef, tyargs, el) ->
       fprintf p "@[<hv 2>builtin %s@,(@[<hov 0>%a@]);@]"
                 (name_of_external ef)
-                print_expr_list (true, el)
+                PrintClight.print_expr_list (true, el)
   | Sbuiltin(Some id, ef, tyargs, el) ->
       fprintf p "@[<hv 2>%s =@ builtin %s@,(@[<hov 0>%a@]);@]"
-                (temp_name id)
+                (PrintClight.temp_name id)
                 (name_of_external ef)
-                print_expr_list (true, el)
+                PrintClight.print_expr_list (true, el)
   | _ ->
       fprintf p "({ %a })" print_stmt s
 
@@ -181,7 +178,7 @@ and print_stmt_for p s =
 
 type clight_version = Clight1 | Clight2
 
-let name_param = function Clight1 -> extern_atom | Clight2 -> temp_name
+let name_param = function Clight1 -> extern_atom | Clight2 -> PrintClight.temp_name
 
 let print_function ver p id f =
   fprintf p "%s@ "
@@ -195,7 +192,7 @@ let print_function ver p id f =
     f.fn_vars;
   List.iter
     (fun (id, ty) ->
-      fprintf p "register %s;@ " (name_cdecl (temp_name id) ty))
+      fprintf p "register %s;@ " (name_cdecl (PrintClight.temp_name id) ty))
     f.fn_temps;
   print_stmt p f.fn_body;
   fprintf p "@;<0 -2>}@]@ @ "
