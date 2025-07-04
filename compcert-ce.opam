@@ -46,4 +46,3 @@ build: [
 ]
 install: [make "install"]
 dev-repo: "git+https://gitlab.inria.fr/cchavano/compcert.git"
-}
