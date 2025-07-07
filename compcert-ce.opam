@@ -48,4 +48,4 @@ build: [
   [make "-j%{jobs}%" {ocaml:version >= "4.06"}]
 ]
 install: [make "install"]
-dev-repo: "git+https://gitlab.inria.fr/cchavano/compcert.git"
+dev-repo: "git+https://gitlab.inria.fr/cchavano/compcert-ce.git"
