@@ -462,7 +462,8 @@ Proof.
   set (x := inj_type t).
   set (sg := [Xint; x; x ---> x]%asttyp).
   assert (LK: lookup_builtin_function "__builtin_sel"%string sg = Some (BI_standard (BI_select t))).
-  { unfold sg, x, t; destruct ty as [ | ? ? ? | ? | [] ? | ? ? | ? ? ? | ? ? ? | ? ? | ? ? ];
+  {
+    unfold sg, x, t; destruct ty as [ | ? ? ? | ? | [] ? | ? ? | ? ? ? | ? ? ? | ? ? | ? ? | ? ?];
     simpl; unfold Tptr; destruct Archi.ptr64; reflexivity. }
   set (v' := if b then v2' else v3').
   assert (C: val_casted v' ty).

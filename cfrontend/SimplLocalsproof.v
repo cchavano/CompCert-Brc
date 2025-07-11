@@ -1450,6 +1450,9 @@ Proof.
 (* tempvar *)
   exploit me_temps; eauto. intros [[tv [A B]] C].
   exists tv; split; auto. constructor; auto.
+(* enumlit *)
+  exists (Vint (Int.repr v)); split; auto.
+  econstructor;eauto.  rewrite comp_env_preserved; auto.
 (* addrof *)
   exploit eval_simpl_lvalue; eauto.
   destruct a; auto with compat.

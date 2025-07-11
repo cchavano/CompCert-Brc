@@ -1305,6 +1305,17 @@ Proof.
   apply make_longconst_correct.
 - (* temp var *)
   constructor; auto.
+- (* emumlit *)
+  unfold transl_enum in EQ.
+  destruct (prog_comp_env cunit)!e0 as [co'|] eqn:CO; try discriminate.
+  assert (SAME : (prog_comp_env cunit) ! e0 = Some co).
+  {
+    exploit field_offset_stable. eexact LINK. eauto. instantiate (1 := xH). intros [A B].
+    unfold ge in *; simpl in *; congruence.
+  }
+  rewrite SAME in CO. inv CO.
+  rewrite H1 in EQ. inv EQ.
+  eapply make_intconst_correct.
 - (* addrof *)
   destruct x0; inv EQ0. apply H0 in EQ. destruct EQ. auto.
 - (* unop *)

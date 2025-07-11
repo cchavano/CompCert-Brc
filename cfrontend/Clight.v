@@ -53,6 +53,7 @@ Inductive expr : Type :=
   | Econst_long: int64 -> type -> expr    (**r long integer literal *)
   | Evar: ident -> type -> expr           (**r variable *)
   | Etempvar: ident -> type -> expr       (**r temporary variable *)
+  | Eenumlit: ident -> type -> expr       (**r enumeration literal *)
   | Ederef: expr -> type -> expr          (**r pointer dereference (unary [*]) *)
   | Eaddrof: expr -> type -> expr         (**r address-of operator ([&]) *)
   | Eunop: unary_operation -> expr -> type -> expr  (**r unary operation *)
@@ -71,6 +72,7 @@ Definition typeof (e: expr) : type :=
   | Econst_single _ ty => ty
   | Econst_long _ ty => ty
   | Evar _ ty => ty
+  | Eenumlit _ ty => ty
   | Etempvar _ ty => ty
   | Ederef _ ty => ty
   | Eaddrof _ ty => ty
@@ -353,6 +355,19 @@ Fixpoint seq_of_labeled_statement (sl: labeled_statements) : statement :=
   | LScons _ s sl' => Ssequence s (seq_of_labeled_statement sl')
   end.
 
+Fixpoint find_enum_position (id:ident) (l:members) :=
+           match l with
+           | nil => None
+           | (Member_plain id' (Tint I32 Signed att)) :: l =>
+               if ident_eq id id' && attr_eq att noattr
+               then Some Z0 else None
+           | _ :: l => match find_enum_position id l with
+                       | None => None
+                       | Some z => Some (z+1)
+                       end
+           end.
+
+
 (** ** Evaluation of expressions *)
 
 Section EXPR.
@@ -377,6 +392,11 @@ Inductive eval_expr: expr -> val -> Prop :=
   | eval_Etempvar:  forall id ty v,
       le!id = Some v ->
       eval_expr (Etempvar id ty) v
+| eval_Eenumlit : forall id e att ty co v,
+    ty = Tenum e att ->
+    ge.(genv_cenv)!e = Some co ->
+    find_enum_position id co.(co_members) = Some v ->
+    eval_expr (Eenumlit id ty) (Vint (Int.repr v))
   | eval_Eaddrof: forall a ty loc ofs,
       eval_lvalue a loc ofs Full ->
       eval_expr (Eaddrof a ty) (Vptr loc ofs)

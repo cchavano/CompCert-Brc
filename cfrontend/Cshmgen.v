@@ -505,6 +505,23 @@ Definition make_field_access (ce: composite_env) (ty: type) (f: ident) (a: expr)
     else Ebinop Oadd a (make_intconst (Int.repr ofs)) in
   OK (a', bf).
 
+(** * Translation of enumeration literals *)
+
+Definition transl_enum (ce:composite_env) (id:ident) (ty:type) : res int :=
+  match ty with
+  | Tenum e _ =>
+      match ce!e with
+      | None => Error (POS e :: MSG " is not a declared type" :: nil)
+      | Some co =>
+          match find_enum_position id co.(co_members) with
+          | None => Error (POS id :: MSG " is not a member of (enum) type " :: POS e :: nil)
+          | Some v => OK (Int.repr v)
+          end
+      end
+  | _      => Error (msg "an enumeration type is expected")
+  end.
+
+
 (** * Translation of expressions *)
 
 (** [transl_expr a] returns the Csharpminor code that computes the value
@@ -521,6 +538,9 @@ Fixpoint transl_expr (ce: composite_env) (a: Clight.expr) {struct a} : res expr 
       OK(make_singleconst n)
   | Clight.Econst_long n _ =>
       OK(make_longconst n)
+  | Clight.Eenumlit id ty =>
+      do i <- transl_enum ce id ty ;
+      OK(make_intconst i)
   | Clight.Evar id ty =>
       make_load (Eaddrof id) ty Full
   | Clight.Etempvar id ty =>

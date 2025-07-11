@@ -44,6 +44,7 @@ let temp_name (id: AST.ident) =
 let precedence = function
   | Evar _ -> (16, NA)
   | Etempvar _ -> (16, NA)
+  | Eenumlit _ -> (16, NA)
   | Ederef _ -> (15, RtoL)
   | Efield _ -> (16, LtoR)
   | Econst_int _ -> (16, NA)
@@ -78,6 +79,7 @@ let rec expr p (prec, e) =
   begin match e with
   | Evar(id, _) ->
       fprintf p "%s" (extern_atom id)
+  | Eenumlit(id,_) -> fprintf p "%s" (extern_atom id)
   | Etempvar(id, _) ->
       fprintf p "%s" (temp_name id)
   | Ederef(a1, _) ->

@@ -128,7 +128,8 @@ let rec name_cdecl id ty =
       "struct " ^ extern_atom name ^ attributes a ^ name_optid id
   | Tunion(name, a) ->
       "union " ^ extern_atom name ^ attributes a ^ name_optid id
-
+  | Tenum(name,a)   ->
+    "enum " ^ extern_atom name ^ attributes a ^ name_optid id
 (* Type *)
 
 let name_type ty = name_cdecl "" ty
@@ -529,7 +530,7 @@ let print_globdef p (id, gd) =
   | Gfun f -> print_fundef p id f
   | Gvar v -> print_globvar p id v
 
-let struct_or_union = function Struct -> "struct" | Union -> "union"
+let struct_or_union = function Struct -> "struct" | Union -> "union" | Enum -> "enum"
 
 let declare_composite p (Composite(id, su, m, a)) =
   fprintf p "%s %s;@ " (struct_or_union su) (extern_atom id)

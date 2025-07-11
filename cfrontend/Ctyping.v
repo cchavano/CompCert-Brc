@@ -283,6 +283,11 @@ Inductive wt_val : val -> type -> Prop :=
   | wt_val_ptr_int: forall b ofs sg a,
       Archi.ptr64 = false ->
       wt_val (Vptr b ofs) (Tint I32 sg a)
+  | wt_val_int_enum: forall n id a,
+      wt_val (Vint n) (Tenum id a)
+  | wt_val_ptr_enum: forall id b ofs a,
+      Archi.ptr64 = false ->
+      wt_val (Vptr b ofs) (Tenum id a)
   | wt_val_long: forall n sg a,
       wt_val (Vlong n) (Tlong sg a)
   | wt_val_ptr_long: forall b ofs sg a,
@@ -311,7 +316,8 @@ Inductive wt_val : val -> type -> Prop :=
   | wt_val_undef: forall ty,
       wt_val Vundef ty
   | wt_val_void: forall v,
-      wt_val v Tvoid.
+      wt_val v Tvoid
+.
 
 Inductive wt_arguments: exprlist -> list type -> Prop :=
   | wt_arg_nil:
@@ -1628,6 +1634,7 @@ Proof.
 - inv AC. destruct Archi.ptr64 eqn:SF; destruct v; auto with ty.
 - destruct f; inv AC; destruct v; auto with ty.
 - inv AC. unfold Mptr. destruct Archi.ptr64 eqn:SF; destruct v; auto with ty.
+- inv AC. unfold Mptr. destruct Archi.ptr64 eqn:SF; destruct v; auto with ty.
 Qed.
 
 Lemma wt_decode_val:
@@ -1653,6 +1660,9 @@ Proof.
 - inv ACC. unfold decode_val. destruct (proj_bytes vl). auto with ty.
   destruct Archi.ptr64 eqn:SF; auto with ty. 
 - destruct f; inv ACC; unfold decode_val; destruct (proj_bytes vl); auto with ty.
+- inv ACC. unfold decode_val. destruct (proj_bytes vl).
+  unfold Mptr in *. destruct Archi.ptr64 eqn:SF; auto with ty.
+  unfold Mptr in *. destruct Archi.ptr64 eqn:SF; auto with ty.
 - inv ACC. unfold decode_val. destruct (proj_bytes vl).
   unfold Mptr in *. destruct Archi.ptr64 eqn:SF; auto with ty.
   unfold Mptr in *. destruct Archi.ptr64 eqn:SF; auto with ty.
@@ -1788,6 +1798,7 @@ Proof.
 - destruct v; contradiction || constructor.
 - destruct v; contradiction || constructor.
 - destruct v; contradiction || constructor.
+- destruct v; contradiction || constructor;assumption.
 Qed.
 
 Lemma wt_rred:
@@ -1831,7 +1842,7 @@ Proof.
 + simpl in B. set (T := typ_of_type ty) in *. set (X := inj_type T) in *.
   set (sg := [Xint; X; X ---> X]%asttyp) in *.
   assert (LK: lookup_builtin_function "__builtin_sel"%string sg = Some (BI_standard (BI_select T))).
-  { unfold sg, X, T; destruct ty as   [ | ? ? ? | ? | [] ? | ? ? | ? ? ? | ? ? ? | ? ? | ? ? ];
+  { unfold sg, X, T; destruct ty as   [ | ? ? ? | ? | [] ? | ? ? | ? ? ? | ? ? ? | ? ? | ? ? | ? ?];
     simpl; unfold Tptr; destruct Archi.ptr64; reflexivity. }
   subst ef. red in H0. red in H0. rewrite LK in H0. inv H0. 
   inv H. inv H8. inv H9. inv H10. simpl in H1.
