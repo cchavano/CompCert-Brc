@@ -495,7 +495,7 @@ with tr_lblstmts: Csyntax.labeled_statements -> labeled_statements -> Prop :=
   | tr_ls_cons: forall c s ls ts tls,
       tr_stmt s ts ->
       tr_lblstmts ls tls ->
-      tr_lblstmts (Csyntax.LScons c s ls) (LScons c ts tls).
+      tr_lblstmts (Csyntax.LScons c s ls) (LScons (option_map SwitchZ c) ts tls).
 
 (** * Correctness proof with respect to the specification. *)
 

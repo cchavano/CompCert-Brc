@@ -141,9 +141,10 @@ Qed.
 (** Properties of labeled statements *)
 
 Lemma transl_lbl_stmt_1:
-  forall ce tyret nbrk ncnt n sl tsl,
+  forall ce tyret nbrk ncnt n sl s tsl,
   transl_lbl_stmt ce tyret nbrk ncnt sl = OK tsl ->
-  transl_lbl_stmt ce tyret nbrk ncnt (Clight.select_switch n sl) = OK (select_switch n tsl).
+  Clight.select_switch ce n sl = OK s ->
+  transl_lbl_stmt ce tyret nbrk ncnt s = OK (select_switch n tsl).
 Proof.
   intros until n.
   assert (DFL: forall sl tsl,
@@ -151,12 +152,17 @@ Proof.
     transl_lbl_stmt ce tyret nbrk ncnt (Clight.select_switch_default sl) = OK (select_switch_default tsl)).
   {
     induction sl; simpl; intros.
-    inv H; auto.
-    monadInv H. simpl. destruct o; eauto. simpl; rewrite EQ; simpl; rewrite EQ1; auto.
+    - inv H; auto.
+    - monadInv H. simpl. destruct o; simpl in *;eauto.
+      monadInv EQ0; auto.
+      inv EQ0.
+      rewrite EQ;simpl.
+      rewrite EQ1; simpl. auto.
   }
-  assert (CASE: forall sl tsl,
+  assert (CASE: forall sl tsl s,
     transl_lbl_stmt ce tyret nbrk ncnt sl = OK tsl ->
-    match Clight.select_switch_case n sl with
+    Clight.select_switch_case ce n sl = OK s ->
+    match s with
     | None =>
         select_switch_case n tsl = None
     | Some sl' =>
@@ -166,16 +172,33 @@ Proof.
     end).
   {
     induction sl; simpl; intros.
-    inv H; auto.
-    monadInv H; simpl. destruct o. destruct (zeq z n).
-    econstructor; split; eauto. simpl; rewrite EQ; simpl; rewrite EQ1; auto.
-    apply IHsl; auto.
-    apply IHsl; auto.
+    - inv H; auto. inv H0.
+      constructor.
+    -  monadInv H; simpl. destruct o.
+       + simpl in EQ0.
+         unfold transl_switch_val in *.
+         destruct (eval_switch_val ce s1) eqn:ES ; try discriminate.
+         simpl in EQ0. inv EQ0.
+         destruct (zeq z n).
+         *   inv H0.
+             econstructor; split; eauto. simpl; rewrite EQ; simpl; rewrite EQ1; auto.
+             simpl. unfold transl_switch_val.
+             rewrite ES. simpl. reflexivity.
+         *
+           apply IHsl; auto.
+       + simpl in EQ0. inv EQ0.
+         apply IHsl; auto.
   }
-  intros. specialize (CASE _ _ H). unfold Clight.select_switch, select_switch.
-  destruct (Clight.select_switch_case n sl) as [sl'|].
-  destruct CASE as [tsl' [P Q]]. rewrite P, Q. auto.
-  rewrite CASE. auto.
+  intros. unfold Clight.select_switch, select_switch in *.
+  monadInv H0.
+  exploit CASE ; eauto.
+  destruct x.
+  + inv EQ0.
+    intros (tsl' & P & Q ).
+    rewrite P, Q. auto.
+  + inv EQ0; auto.
+    intros.
+    rewrite H0. auto.
 Qed.
 
 Lemma transl_lbl_stmt_2:
@@ -1662,6 +1685,54 @@ Proof.
   split; auto; eapply match_Kcall_normalize; eauto.
 Qed.
 
+Lemma select_switch_preserved :
+  forall cu n ty nb1 nb2 sl s s'
+  (LK : linkorder cu prog)
+         (H1 : Clight.select_switch ge n sl = OK s)
+         (EQ1 : transl_lbl_stmt (prog_comp_env cu) ty nb1 nb2 sl = OK s'),
+    Clight.select_switch (prog_comp_env cu) n sl = OK s.
+Proof.
+  unfold Clight.select_switch.
+  intros.
+  monadInv H1.
+  assert (CASE : Clight.select_switch_case (prog_comp_env cu) n sl = OK x).
+  {
+    revert EQ1 EQ.
+    clear EQ0.
+    revert s' x.
+    induction sl; simpl; intros; auto.
+    destruct o.
+    monadInv EQ1.
+    simpl in EQ2.
+    unfold  transl_switch_val in EQ2.
+    monadInv EQ2.
+    destruct (eval_switch_val (prog_comp_env cu) s1) eqn:ES; try discriminate.
+    inv EQ3.
+    rename x3 into z.
+    assert (ES' : eval_switch_val (prog_comp_env prog) s1 = Some z).
+    {
+      clear - LK ES.
+      destruct s1; simpl in *; auto.
+      destruct ((prog_comp_env cu)! et) eqn:GE ; try discriminate.
+      destruct LK.
+      apply H0 in GE.
+      rewrite GE.
+      auto.
+    }
+    rewrite ES' in *.
+    destruct (zeq z n).
+    - inv EQ. reflexivity.
+    - eapply IHsl; eauto.
+    - monadInv EQ1.
+      simpl in EQ2. inv EQ2.
+      eapply IHsl; eauto.
+  }
+  rewrite CASE.
+  simpl; auto.
+Qed.
+
+
+
 (** The simulation proof *)
 
 Lemma transl_step:
@@ -1855,6 +1926,7 @@ Proof.
   constructor.
 
 - (* switch *)
+  simpl in TR.
   monadInv TR.
   assert (E: exists b, ts = Sblock (Sswitch b x x0) /\ Switch.switch_argument b v n).
   { unfold sem_switch_arg in H0.
@@ -1863,13 +1935,16 @@ Proof.
   destruct E as (b & A & B). subst ts.
   exploit transl_expr_correct; eauto. intro EV.
   econstructor; split.
-  eapply star_plus_trans. eapply match_transl_step; eauto.
-  apply plus_one. econstructor; eauto. traceEq.
-  econstructor; eauto.
-  apply transl_lbl_stmt_2. apply transl_lbl_stmt_1. eauto.
-  constructor.
+  eapply star_plus_trans.
+  eapply match_transl_step; eauto.
+  apply plus_one. econstructor. eauto. eauto. traceEq.
+  econstructor. eauto. auto.
+  apply transl_lbl_stmt_2.
+  eapply transl_lbl_stmt_1; eauto.
+  eapply select_switch_preserved; eauto.
+  constructor; auto.
+  auto.
   econstructor. eauto.
-
 - (* skip or break switch *)
   assert ((ts' = Sskip \/ ts' = Sexit nbrk) /\ tk' = tk).
     destruct H; subst x; monadInv TR; inv MTR; auto.

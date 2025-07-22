@@ -600,7 +600,7 @@ with transl_lblstmt (ls: Csyntax.labeled_statements) : mon labeled_statements :=
   | Csyntax.LScons c s ls1 =>
       do ts <- transl_stmt s;
       do tls1 <- transl_lblstmt ls1;
-      ret (LScons c ts tls1)
+      ret (LScons (option_map SwitchZ c) ts tls1)
   end.
 
 (** Translation of a function *)
