@@ -1,6 +1,6 @@
 opam-version: "2.0"
 name: "CompCert-Ce"
-version: "3.16~dev"
+version: "3.16-dev.20250728ce"
 synopsis: "The CompCert C compiler (64 bit)"
 maintainer: "Michael Soegtrop and Xavier Leroy"
 authors: "Xavier Leroy <xavier.leroy@college-de-france.fr>"
