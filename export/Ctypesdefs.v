@@ -49,6 +49,7 @@ Definition tattr (a: attr) (ty: type) :=
   | Tfunction args res cc => Tfunction args res cc
   | Tstruct id _ => Tstruct id a
   | Tunion id  _ => Tunion id a
+  | Tenum id _ => Tenum id a
   end.
 
 Definition tvolatile (ty: type) := tattr volatile_attr ty.

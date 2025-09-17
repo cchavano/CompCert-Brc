@@ -56,6 +56,8 @@ let rec expr p = function
       fprintf p "(Evar %a %a)" ident id typ t
   | Etempvar(id, t) ->
       fprintf p "(Etempvar %a %a)" ident id typ t
+  | Eenumlit(id, t) ->
+      fprintf p "(Eenum_lit %a %a)" ident id typ t
   | Ederef(a1, t) ->
       fprintf p "@[<hov 2>(Ederef@ %a@ %a)@]" expr a1 typ t
   | Efield(a1, f, t) ->
@@ -84,6 +86,12 @@ let rec expr p = function
       fprintf p "(Ealignof %a %a)" typ t1 typ t
 
 (* Statements *)
+
+let switchval p v =
+  match v with
+  | SwitchZ z -> coqZ p z
+  | SwitchE (e, _) ->
+      fprintf p "%a" ident e
 
 let rec stmt p = function
   | Sskip ->
@@ -133,7 +141,7 @@ and lblstmts p = function
       (fprintf p "LSnil")
   | LScons(lbl, s, ls) ->
       fprintf p "@[<hv 2>(LScons %a@ %a@ %a)@]"
-              (print_option coqZ) lbl stmt s lblstmts ls
+              (print_option switchval) lbl stmt s lblstmts ls
 
 (* Global definitions *)
 
@@ -178,6 +186,7 @@ Local Open Scope clight_scope.\n"
 let rec name_expr = function
   | Evar(id, t) -> ()
   | Etempvar(id, t) -> name_temporary id
+  | Eenumlit (e, t) -> failwith "TODO"
   | Ederef(a1, t) -> name_expr a1
   | Efield(a1, f, t) -> name_expr a1
   | Econst_int(n, t) -> ()

@@ -533,20 +533,31 @@ let print_globdef p (id, gd) =
 let struct_or_union = function Struct -> "struct" | Union -> "union" | Enum -> "enum"
 
 let declare_composite p (Composite(id, su, m, a)) =
-  fprintf p "%s %s;@ " (struct_or_union su) (extern_atom id)
+  match su with
+  | Struct | Union ->
+      fprintf p "%s %s;@ " (struct_or_union su) (extern_atom id)
+  | Enum -> ()
 
-let print_member p = function
-  | Member_plain(id, ty) ->
-      fprintf p "@ %s;" (name_cdecl (extern_atom id) ty)
-  | Member_bitfield(id, sz, sg, attr, w, _is_padding) ->
-      fprintf p "@ %s : %s;"
-              (name_cdecl (extern_atom id) (Tint(sz, sg, attr)))
-              (Z.to_string w)
+let print_member su p m =
+  match su with
+  | Enum -> begin match m with
+      | Member_plain(id, _) -> fprintf p "@ %s," (extern_atom id)
+      | _ -> ()
+    end
+  | _ -> begin
+      match m with
+      | Member_plain(id, ty) ->
+          fprintf p "@ %s;" (name_cdecl (extern_atom id) ty)
+      | Member_bitfield(id, sz, sg, attr, w, _is_padding) ->
+          fprintf p "@ %s : %s;"
+                  (name_cdecl (extern_atom id) (Tint(sz, sg, attr)))
+                  (Z.to_string w)
+    end
 
 let define_composite p (Composite(id, su, m, a)) =
   fprintf p "@[<v 2>%s %s%s {"
           (struct_or_union su) (extern_atom id) (attributes a);
-  List.iter (print_member p) m;
+  List.iter (print_member su p) m;
   fprintf p "@;<0 -2>};@]@ @ "
 
 let print_program p prog =
