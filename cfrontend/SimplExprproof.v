@@ -1154,11 +1154,12 @@ Inductive match_states: Csem.state -> state -> Prop :=
 (** Additional results on translation of statements *)
 
 Lemma tr_select_switch:
-  forall ce n ls tls,
+  forall ce ce' n ls tls,
   tr_lblstmts ce ls tls ->
-  tr_lblstmts ce (Csem.select_switch n ls) (select_switch n tls).
+  exists s, select_switch ce' n tls = OK s /\
+              tr_lblstmts ce (Csem.select_switch n ls) s.
 Proof.
-  intros ce.
+  intros ce ce'.
   assert (DFL: forall ls tls,
       tr_lblstmts ce ls tls ->
       tr_lblstmts ce (Csem.select_switch_default ls) (select_switch_default tls)).
@@ -1167,19 +1168,19 @@ Proof.
       tr_lblstmts ce ls tls ->
       match Csem.select_switch_case n ls with
       | None =>
-          select_switch_case n tls = None
+          select_switch_case ce' n tls = OK None
       | Some ls' =>
-          exists tls', select_switch_case n tls = Some tls' /\ tr_lblstmts ce ls' tls'
+          exists tls', select_switch_case ce' n tls = OK (Some tls') /\ tr_lblstmts ce ls' tls'
       end).
   { induction 1; simpl; intros.
     auto.
-    destruct c; auto. destruct (zeq z n); auto.
+    destruct c; auto. simpl. destruct (zeq z n); auto.
     econstructor; split; eauto. constructor; auto. }
   intros. unfold Csem.select_switch, select_switch.
   specialize (CASE n ls tls H).
   destruct (Csem.select_switch_case n ls) as [ls'|].
-  destruct CASE as [tls' [P Q]]. rewrite P. auto.
-  rewrite CASE. apply DFL; auto.
+  destruct CASE as [tls' [P Q]]. rewrite P. simpl. eauto.
+  rewrite CASE. simpl. eexists.  split; eauto.
 Qed.
 
 Lemma tr_seq_of_labeled_statement:
@@ -2327,10 +2328,13 @@ Proof.
   econstructor; eauto. constructor; auto.
 - (* expr switch *)
   inv MK. exploit tr_top_val_for_val_inv; eauto. intros [A [B C]]. subst.
+  exploit tr_select_switch;eauto.
+  intros (sws & SS & TRS).
   econstructor; split.
-  left; eapply plus_two. constructor. econstructor; eauto. traceEq.
+  left; eapply plus_two. constructor. econstructor; eauto.
+  traceEq.
   econstructor; eauto.
-  apply tr_seq_of_labeled_statement. apply tr_select_switch. auto.
+  apply tr_seq_of_labeled_statement. auto.
   constructor; auto.
 
 - (* skip-or-break switch *)

@@ -32,7 +32,7 @@ Require Import Smallstep.
 Require Import Ctypes.
 Require Import Cop.
 Require Clight.
-
+Local Open Scope error_monad_scope.
 (** * Abstract syntax *)
 
 (** ** Expressions *)
@@ -84,7 +84,7 @@ Inductive statement : Type :=
 
 with labeled_statements : Type :=            (**r cases of a [switch] *)
   | LSnil: labeled_statements
-  | LScons: option Z -> statement -> labeled_statements -> labeled_statements.
+  | LScons: option Clight.switch_val -> statement -> labeled_statements -> labeled_statements.
                       (**r [None] is [default], [Some x] is [case x] *)
 
 (** The C loops are derived forms. *)
@@ -242,17 +242,23 @@ Fixpoint select_switch_default (sl: labeled_statements): labeled_statements :=
   | LScons (Some i) s sl' => select_switch_default sl'
   end.
 
-Fixpoint select_switch_case (n: Z) (sl: labeled_statements): option labeled_statements :=
+Fixpoint select_switch_case (ce: composite_env) (n: Z) (sl: labeled_statements): res (option labeled_statements) :=
   match sl with
-  | LSnil => None
-  | LScons None s sl' => select_switch_case n sl'
-  | LScons (Some c) s sl' => if zeq c n then Some sl else select_switch_case n sl'
+  | LSnil => OK None
+  | LScons None s sl' => select_switch_case ce n sl'
+  | LScons (Some c) s sl' =>
+      match Clight.eval_switch_val ce c with
+      | None => Error (msg "Invalid enum literal")
+      | Some z =>
+          if zeq z n then OK (Some sl) else select_switch_case ce n sl'
+      end
   end.
 
-Definition select_switch (n: Z) (sl: labeled_statements): labeled_statements :=
-  match select_switch_case n sl with
-  | Some sl' => sl'
-  | None => select_switch_default sl
+Definition select_switch (ce: composite_env) (n: Z) (sl: labeled_statements): res labeled_statements :=
+  do s <- select_switch_case ce n sl;
+  match s with
+  | Some sl' => OK sl'
+  | None => OK (select_switch_default sl)
   end.
 
 (** Turn a labeled statement into a sequence *)
@@ -563,11 +569,12 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State f Sskip k e le m)
         E0 (Returnstate Vundef k m')
 
-  | step_switch: forall f a sl k e le m v n,
+  | step_switch: forall f a sl k e le m v n s,
       eval_expr e le m a v ->
       sem_switch_arg v (Clight.typeof a) = Some n ->
+      (select_switch ge.(genv_cenv) n sl) = OK s ->
       step (State f (Sswitch a sl) k e le m)
-        E0 (State f (seq_of_labeled_statement (select_switch n sl)) (Kswitch k) e le m)
+        E0 (State f (seq_of_labeled_statement s) (Kswitch k) e le m)
   | step_skip_break_switch: forall f x k e le m,
       x = Sskip \/ x = Sbreak ->
       step (State f x (Kswitch k) e le m)

@@ -31,7 +31,7 @@ Require Import Globalenvs.
 Require Import Smallstep.
 Require Import Ctypes.
 Require Import Cop.
-
+Local Open Scope error_monad_scope.
 (** * Abstract syntax *)
 
 (** ** Expressions *)
@@ -53,6 +53,7 @@ Inductive expr : Type :=
   | Econst_long: int64 -> type -> expr    (**r long integer literal *)
   | Evar: ident -> type -> expr           (**r variable *)
   | Etempvar: ident -> type -> expr       (**r temporary variable *)
+  | Eenumlit: ident -> type -> expr       (**r enumeration literal *)
   | Ederef: expr -> type -> expr          (**r pointer dereference (unary [*]) *)
   | Eaddrof: expr -> type -> expr         (**r address-of operator ([&]) *)
   | Eunop: unary_operation -> expr -> type -> expr  (**r unary operation *)
@@ -71,6 +72,7 @@ Definition typeof (e: expr) : type :=
   | Econst_single _ ty => ty
   | Econst_long _ ty => ty
   | Evar _ ty => ty
+  | Eenumlit _ ty => ty
   | Etempvar _ ty => ty
   | Ederef _ ty => ty
   | Eaddrof _ ty => ty
@@ -93,6 +95,11 @@ Definition typeof (e: expr) : type :=
 
 Definition label := ident.
 
+Inductive switch_val :=
+| SwitchZ (z:Z) (* an integer *)
+| SwitchE (e:ident) (et:ident) (* e is an enum literal of the enum type et *).
+
+
 Inductive statement : Type :=
   | Sskip : statement                   (**r do nothing *)
   | Sassign : expr -> expr -> statement (**r assignment [lvalue = rvalue] *)
@@ -111,7 +118,7 @@ Inductive statement : Type :=
 
 with labeled_statements : Type :=            (**r cases of a [switch] *)
   | LSnil: labeled_statements
-  | LScons: option Z -> statement -> labeled_statements -> labeled_statements.
+  | LScons: option switch_val -> statement -> labeled_statements -> labeled_statements.
                       (**r [None] is [default], [Some x] is [case x] *)
 
 (** The C loops are derived forms. *)
@@ -332,17 +339,48 @@ Fixpoint select_switch_default (sl: labeled_statements): labeled_statements :=
   | LScons (Some i) s sl' => select_switch_default sl'
   end.
 
-Fixpoint select_switch_case (n: Z) (sl: labeled_statements): option labeled_statements :=
-  match sl with
-  | LSnil => None
-  | LScons None s sl' => select_switch_case n sl'
-  | LScons (Some c) s sl' => if zeq c n then Some sl else select_switch_case n sl'
+Fixpoint find_enum_position (id:ident) (l:members) :=
+           match l with
+           | nil => None
+           | (Member_plain id' (Tint I32 Signed att)) :: l =>
+               if ident_eq id id' && attr_eq att noattr
+               then Some Z0 else None
+           | _ :: l => match find_enum_position id l with
+                       | None => None
+                       | Some z => Some (z+1)
+                       end
+           end.
+
+Definition eval_switch_val (ce:composite_env) (v:switch_val) : option Z :=
+  match v with
+  | SwitchZ z => Some z
+  | SwitchE id e =>
+      match ce!e with
+      | Some co => match find_enum_position id co.(co_members) with
+                   | None => None
+                   | Some i => Some i
+                   end
+      | None => None
+      end
   end.
 
-Definition select_switch (n: Z) (sl: labeled_statements): labeled_statements :=
-  match select_switch_case n sl with
-  | Some sl' => sl'
-  | None => select_switch_default sl
+Fixpoint select_switch_case (ce: composite_env) (n: Z) (sl: labeled_statements): res (option labeled_statements) :=
+  match sl with
+  | LSnil => OK None
+  | LScons None s sl' => select_switch_case ce n sl'
+  | LScons (Some c) s sl' =>
+      match eval_switch_val ce c with
+      | None => Error (msg "Invalid enum literal")
+      | Some z =>
+          if zeq z n then OK (Some sl) else select_switch_case ce n sl'
+      end
+  end.
+
+Definition select_switch (ce: composite_env) (n: Z) (sl: labeled_statements): res labeled_statements :=
+  do s <- select_switch_case ce n sl;
+  match s with
+  | Some sl' => OK sl'
+  | None => OK (select_switch_default sl)
   end.
 
 (** Turn a labeled statement into a sequence *)
@@ -352,6 +390,8 @@ Fixpoint seq_of_labeled_statement (sl: labeled_statements) : statement :=
   | LSnil => Sskip
   | LScons _ s sl' => Ssequence s (seq_of_labeled_statement sl')
   end.
+
+
 
 (** ** Evaluation of expressions *)
 
@@ -377,6 +417,11 @@ Inductive eval_expr: expr -> val -> Prop :=
   | eval_Etempvar:  forall id ty v,
       le!id = Some v ->
       eval_expr (Etempvar id ty) v
+| eval_Eenumlit : forall id e att ty co v,
+    ty = Tenum e att ->
+    ge.(genv_cenv)!e = Some co ->
+    find_enum_position id co.(co_members) = Some v ->
+    eval_expr (Eenumlit id ty) (Vint (Int.repr v))
   | eval_Eaddrof: forall a ty loc ofs,
       eval_lvalue a loc ofs Full ->
       eval_expr (Eaddrof a ty) (Vptr loc ofs)
@@ -638,11 +683,12 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State f Sskip k e le m)
         E0 (Returnstate Vundef k m')
 
-  | step_switch: forall f a sl k e le m v n,
+  | step_switch: forall f a sl k e le m v n s,
       eval_expr e le m a v ->
       sem_switch_arg v (typeof a) = Some n ->
+      (select_switch ge.(genv_cenv) n sl) = OK s ->
       step (State f (Sswitch a sl) k e le m)
-        E0 (State f (seq_of_labeled_statement (select_switch n sl)) (Kswitch k) e le m)
+        E0 (State f (seq_of_labeled_statement s) (Kswitch k) e le m)
   | step_skip_break_switch: forall f x k e le m,
       x = Sskip \/ x = Sbreak ->
       step (State f x (Kswitch k) e le m)
