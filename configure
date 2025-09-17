@@ -229,11 +229,13 @@ casmruntime=""
 clinker="${toolprefix}gcc"
 clinker_options=""
 clinker_needs_no_pie=true
+clinker_needs_nobtcfi=false
 cprepro="${toolprefix}gcc"
 cprepro_options="-E"
 archiver="${toolprefix}ar rcs"
 libmath="-lm"
 responsefile="gnu"
+pic_supported=false
 
 #
 # ARM Target Configuration
@@ -352,17 +354,22 @@ if test "$arch" = "x86" -a "$bitsize" = "64"; then
         casm_options="-m64 -c"
         clinker="${toolprefix}cc"
         clinker_options="-m64"
+        clinker_needs_no_pie=false
         cprepro="${toolprefix}cc"
         cprepro_options="-m64 -U__GNUC__ -U__SIZEOF_INT128__ -E"
         system="bsd"
+        pic_supported=true
+        clinker_needs_nobtcfi=true
         ;;
     linux)
         abi="standard"
         cc_options="-m64"
         casm_options="-m64 -c"
         clinker_options="-m64"
+        clinker_needs_no_pie=false
         cprepro_options="-m64 -U__GNUC__ -U__SIZEOF_INT128__ -E"
         system="linux"
+        pic_supported=true
         ;;
     macos|macosx)
         abi="macos"
@@ -373,6 +380,7 @@ if test "$arch" = "x86" -a "$bitsize" = "64"; then
         cprepro_options="-arch x86_64 -U__GNUC__ -U__SIZEOF_INT128__ -U__clang__ -U__BLOCKS__ '-D__attribute__(x)=' '-D__asm(x)=' '-D_Nullable=' '-D_Nonnull=' '-D__DARWIN_OS_INLINE=static inline' -Wno-\\#warnings -E"
         libmath=""
         system="macos"
+        pic_supported=true
         ;;
     cygwin)
         abi="standard"
@@ -403,8 +411,10 @@ if test "$arch" = "riscV"; then
   cc_options="$model_options"
   casm_options="$model_options -c"
   clinker_options="$model_options"
+  clinker_needs_no_pie=false
   cprepro_options="$model_options -U__GNUC__ -E"
   system="linux"
+  pic_supported=true
 fi
 
 #
@@ -415,7 +425,9 @@ if test "$arch" = "aarch64"; then
     linux)
         abi="standard"
         cprepro_options="-U__GNUC__ -E"
-        system="linux";;
+        system="linux"
+        pic_supported=true
+        ;;
     macos|macosx)
         abi="apple"
         casm="${toolprefix}cc"
@@ -427,6 +439,7 @@ if test "$arch" = "aarch64"; then
         cprepro_options="-arch arm64 -U__GNUC__ -U__clang__ -U__BLOCKS__ '-D__attribute__(x)=' '-D__asm(x)=' '-D_Nullable=' '-D_Nonnull=' '-D__DARWIN_OS_INLINE=static inline' -Wno-\\#warnings -E"
         libmath=""
         system="macos"
+        pic_supported=true
         ;;
     *)
         echo "Error: invalid eabi/system '$target' for architecture AArch64." 1>&2
@@ -456,7 +469,7 @@ int main (void)
 EOF
     errout=$("$@" -o "$tmpout" "$tmpsrc" 2>&1 >/dev/null)
     retcode=$?
-    errcount=$(echo "${errout}" | grep -ciE "(unknown|unsupported|unrecognized).*(option|argument)")
+    errcount=$(echo "${errout}" | grep -ciE "(unknown|unsupported|unrecognized|ignored)")
     rm -f "$tmpsrc" "$tmpout"
     # Test failed or error is logged to stderr
     if [ "${retcode}" != "0" ] || [ "${errcount}" != "0" ]; then return 1; fi
@@ -501,6 +514,18 @@ if ($clinker_needs_no_pie) then
   fi
 fi
 
+#
+# Test Availability of Option '-z nobtcfi' or '-Wl,-z,nobtcfi'
+#
+if ($clinker_needs_nobtcfi) then
+  echo "Testing linker support for 'nobtcfi' option... " | tr -d '\n'
+  if testcompiler ${cc} -z nobtcfi;
+  then echo "yes, '-z nobtcfi'"; clinker_options="${clinker_options} -z nobtcfi"
+  elif testcompiler ${cc} -Wl,-z,nobtcfi;
+  then echo "yes, '-Wl,-z,nobtcfi'"; clinker_options="${clinker_options} -Wl,-z,nobtcfi"
+  else echo "no"
+  fi
+fi
 
 #
 # Test Availability of Required Tools
@@ -697,6 +722,7 @@ HAS_STANDARD_HEADERS=$has_standard_headers
 INSTALL_COQDEV=$install_coqdev
 LIBMATH=$libmath
 MODEL=$model
+PIC_SUPPORTED=$pic_supported
 SYSTEM=$system
 RESPONSEFILE=$responsefile
 LIBRARY_FLOCQ=$library_Flocq
@@ -759,6 +785,10 @@ ENDIANNESS=
 # SYSTEM=macos
 # SYSTEM=cygwin
 SYSTEM=
+
+# Are we able to produce position-independent code (with the `-fpic` option)?
+#PIC_SUPPORTED=true
+PIC_SUPPORTED=false
 
 # C compiler (for testing only)
 CC=cc
@@ -858,6 +888,7 @@ CompCert configuration:
     Hardware model................ $model
     Application binary interface.. $abi
     Endianness.................... $endianness
+    PIC generation supported...... $pic_supported
     OS and development env........ $system
     C compiler.................... $cc $cc_options
     C preprocessor................ $cprepro $cprepro_options
