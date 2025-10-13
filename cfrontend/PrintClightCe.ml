@@ -23,6 +23,10 @@ open Ctypes
 open PrintCsyntax
 open ClightCe
 
+let always_inline_defs : (AST.ident list) ref = ref []
+
+let static_defs : (AST.ident list) ref = ref []
+
 let precedence_cexpr = function
   | CE_expr _  -> (16,NA)
   | CE_and(e1,e2) -> (5,LtoR)
@@ -180,9 +184,26 @@ type clight_version = Clight1 | Clight2
 
 let name_param = function Clight1 -> extern_atom | Clight2 -> PrintClight.temp_name
 
+let fundef_attribs id : string =
+  let inline =
+    if List.mem id !always_inline_defs then "inline __attribute__((always_inline)) "
+    else if C2C.atom_inline id = C2C.Inline then "inline "
+    else ""
+  in
+  sprintf "%s%s"
+    (if (List.mem id !static_defs) || C2C.atom_is_static id
+     then "static "
+     else "")
+    inline
+
+let fundecl_attribs id : string =
+  if (List.mem id !static_defs) || C2C.atom_is_static id
+  then "static "
+  else ""
+
 let print_function ver p id f =
-  fprintf p "%s@ "
-            (name_cdecl (name_function_parameters (name_param ver)
+  fprintf p "%s%s@ "
+             (fundef_attribs id) (name_cdecl (name_function_parameters (name_param ver)
                                  (extern_atom id) f.fn_params f.fn_callconv)
                         f.fn_return);
   fprintf p "@[<v 2>{@ ";
@@ -216,8 +237,8 @@ let print_fundecl p id fd =
   | Ctypes.External(_, _, _, _) ->
       ()
   | Internal f ->
-      fprintf p "%s;@ "
-                (name_cdecl (extern_atom id) (type_of_function f))
+      fprintf p "%s%s;@ "
+                 (fundecl_attribs id) (name_cdecl (extern_atom id) (type_of_function f))
 
 let print_globdef var p (id, gd) =
   match gd with
