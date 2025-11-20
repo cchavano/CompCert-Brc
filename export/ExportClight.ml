@@ -186,7 +186,7 @@ Local Open Scope clight_scope.\n"
 let rec name_expr = function
   | Evar(id, t) -> ()
   | Etempvar(id, t) -> name_temporary id
-  | Eenumlit (e, t) -> failwith "TODO"
+  | Eenumlit (e, t) -> ()
   | Ederef(a1, t) -> name_expr a1
   | Efield(a1, f, t) -> name_expr a1
   | Econst_int(n, t) -> ()
