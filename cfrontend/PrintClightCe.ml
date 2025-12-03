@@ -22,30 +22,7 @@ open PrintAST
 open Ctypes
 open PrintCsyntax
 open ClightCe
-
-type inline_status =
-  | No_specifier
-  | Inline
-  | Always_inline
-  
-type fun_info = {
-  f_inline : inline_status;
-  f_static : bool;
-}
-
-let decl_fun : (AST.ident, fun_info) Hashtbl.t = Hashtbl.create 103
-
-let fun_is_static a =
-  try
-    (Hashtbl.find decl_fun a).f_static
-  with Not_found ->
-    false
-
-let fun_inline a =
-  try
-    (Hashtbl.find decl_fun a).f_inline
-  with Not_found ->
-    No_specifier
+open Barocq2C
 
 let precedence_cexpr = function
   | CE_expr _  -> (16,NA)
@@ -203,25 +180,6 @@ and print_stmt_for p s =
 type clight_version = Clight1 | Clight2
 
 let name_param = function Clight1 -> extern_atom | Clight2 -> PrintClight.temp_name
-
-let fundef_attribs id : string =
-  let inline =
-    match fun_inline id with
-    | No_specifier ->
-        if C2C.atom_inline id = C2C.Inline then  "inline " else ""
-    | Inline -> "inline "
-    | Always_inline -> "inline __attribute__((always_inline)) "
-  in
-  sprintf "%s%s"
-    (if fun_is_static id || C2C.atom_is_static id
-     then "static "
-     else "")
-    inline
-
-let fundecl_attribs id : string =
-  if fun_is_static id || C2C.atom_is_static id
-  then "static "
-  else ""
 
 let print_function ver p id f =
   fprintf p "%s%s@ "

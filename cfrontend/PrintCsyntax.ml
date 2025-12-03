@@ -23,6 +23,13 @@ open AST
 open! Ctypes
 open Cop
 open Csyntax
+open Barocq2C
+
+type source_lang =
+  | Lang_barocq
+  | Lang_c
+
+let src : source_lang ref = ref Lang_c
 
 let name_unop = function
   | Onotbool -> "!"
@@ -178,6 +185,12 @@ let print_typed_value p v ty =
   match v, ty with
   | Vint n, Ctypes.Tint(I32, Unsigned, _) ->
       fprintf p "%luU" (camlint_of_coqint n)
+  | Vint n, Ctypes.Tenum(eid, _) ->
+      if !src = Lang_barocq then
+        match Hashtbl.find_opt enum_constr_names (eid, n) with
+          | Some constr -> fprintf p "%s" (extern_atom constr)
+          | None -> fprintf p "%luU" (camlint_of_coqint n)
+      else fprintf p "%luU" (camlint_of_coqint n)
   | Vint n, _ ->
       fprintf p "%ld" (camlint_of_coqint n)
   | Vfloat f, _ ->
@@ -322,7 +335,8 @@ let print_exprlist p el = exprlist p (true, el)
 let rec print_stmt p s =
   match s with
   | Sskip ->
-      fprintf p "/*skip*/;"
+      if !src = Lang_barocq then ()
+      else fprintf p "/*skip*/;"
   | Sdo e ->
       fprintf p "%a;" print_expr e
   | Ssequence(s1, s2) ->
@@ -357,7 +371,7 @@ let rec print_stmt p s =
   | Sswitch(e, cases) ->
       fprintf p "@[<v 2>switch (%a) {@ %a@;<0 -2>}@]"
               print_expr e
-              print_cases cases
+              print_cases (cases, (typeof e))
   | Sreturn None ->
       fprintf p "return;"
   | Sreturn (Some e) ->
@@ -367,23 +381,35 @@ let rec print_stmt p s =
   | Sgoto lbl ->
       fprintf p "goto %s;" (extern_atom lbl)
 
-and print_cases p cases =
+and print_cases p (cases, ty) =
   match cases with
   | LSnil ->
       ()
   | LScons(lbl, Sskip, rem) ->
       fprintf p "%a:@ %a"
-              print_case_label lbl
-              print_cases rem
+              print_case_label (lbl, ty)
+              print_cases (rem, ty)
   | LScons(lbl, s, rem) ->
       fprintf p "@[<v 2>%a:@ %a@]@ %a"
-              print_case_label lbl
+              print_case_label (lbl, ty)
               print_stmt s
-              print_cases rem
+              print_cases (rem, ty)
 
-and print_case_label p = function
+and print_case_label p (lbl, ty) =
+  match lbl with
   | None -> fprintf p "default"
-  | Some lbl -> fprintf p "case %s" (Z.to_string lbl)
+  | Some lbl ->
+      let lbl_str =
+        if !src = Lang_barocq then
+          match ty with
+          | Tenum (id, _) ->
+              let constr = Hashtbl.find enum_constr_names (id, lbl) in
+              extern_atom constr
+          | _ -> Z.to_string lbl
+        else
+          Z.to_string lbl
+      in
+      fprintf p "case %s" lbl_str
 
 and print_stmt_for p s =
   match s with
@@ -417,7 +443,8 @@ let name_function_parameters name_param fun_name params cconv =
   Buffer.contents b
 
 let print_function p id f =
-  fprintf p "%s@ "
+  fprintf p "%s%s@ "
+            (if !src = Lang_barocq then fundef_attribs id else "")
             (name_cdecl (name_function_parameters extern_atom
                              (extern_atom id) f.fn_params f.fn_callconv)
                         f.fn_return);
@@ -442,8 +469,10 @@ let print_fundef p id fd =
 let print_fundecl p id fd =
   match fd with
   | Ctypes.Internal f ->
-      let linkage = if C2C.atom_is_static id then "static" else "extern" in
-      fprintf p "%s %s;@ @ " linkage
+      let linkage =
+        if !src = Lang_barocq then fundecl_attribs id
+        else if C2C.atom_is_static id then "static " else "extern " in
+      fprintf p "%s%s;@ @ " linkage
                 (name_cdecl (extern_atom id) (Csyntax.type_of_function f))
   | _ -> ()
 
@@ -561,6 +590,8 @@ let define_composite p (Composite(id, su, m, a)) =
   fprintf p "@;<0 -2>};@]@ @ "
 
 let print_program p prog =
+  if !src = Lang_barocq then
+    fill_enum_constr_names prog.prog_types;
   fprintf p "@[<v 0>";
   List.iter (declare_composite p) prog.prog_types;
   List.iter (define_composite p) prog.prog_types;
