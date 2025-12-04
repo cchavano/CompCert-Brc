@@ -327,6 +327,10 @@ Fixpoint transl_expr (dst: destination) (a: Csyntax.expr) : mon (list statement 
   | Csyntax.Ederef r ty =>
       do (sl, a) <- transl_expr For_val r;
       ret (finish dst sl (Ederef' a ty))
+  | Csyntax.Eindex r1 r2 ty =>
+      do (sl1, a1) <- transl_expr For_val r1;
+      do (sl2, a2) <- transl_expr For_val r2;
+      ret (finish dst (sl1 ++ sl2) (Ederef' (Ebinop Oadd a1 a2 (Tpointer ty noattr)) ty))
   | Csyntax.Efield r f ty =>
       do (sl, a) <- transl_expr For_val r;
       ret (finish dst sl (Efield a f ty))

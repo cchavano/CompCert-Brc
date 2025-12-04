@@ -425,7 +425,13 @@ with wt_lvalue : expr -> Prop :=
       wt_rvalue r ->
       type_deref (typeof r) = OK ty ->
       wt_lvalue (Ederef r ty)
-  | wt_Efield: forall r f id a co ty,
+| wt_Eindex: forall r1 r2 ta ty,
+    wt_rvalue r1 ->
+    wt_rvalue r2 ->
+    type_binop Oadd (typeof r1) (typeof r2) = OK ta ->
+    type_deref ta = OK  ty ->
+    wt_lvalue (Eindex r1 r2 ty)
+| wt_Efield: forall r f id a co ty,
       wt_rvalue r ->
       typeof r = Tstruct id a \/ typeof r = Tunion id a ->
       ce!id = Some co ->
@@ -449,6 +455,7 @@ Definition expr_kind (a: expr) : kind :=
   | Eloc _ _ _ _ => LV
   | Evar _ _ => LV
   | Ederef _ _ => LV
+  | Eindex _ _ _ => LV
   | Efield _ _ _ => LV
   | _ => RV
   end.
@@ -602,7 +609,7 @@ Fixpoint check_arguments (el: exprlist) (tyl: list type) : res unit :=
 
 Definition check_rval (e: expr) : res unit :=
   match e with
-  | Eloc _ _ _ _ | Evar _ _ | Ederef _ _ | Efield _ _ _ =>
+  | Eloc _ _ _ _ | Evar _ _ | Ederef _ _ | Eindex _ _ _ | Efield _ _ _ =>
       Error (msg "not a r-value")
   | _ =>
       OK tt
@@ -610,7 +617,7 @@ Definition check_rval (e: expr) : res unit :=
 
 Definition check_lval (e: expr) : res unit :=
   match e with
-  | Eloc _ _ _ _ | Evar _ _ | Ederef _ _ | Efield _ _ _ =>
+  | Eloc _ _ _ _ | Evar _ _ | Ederef _ _ | Eindex _ _ _ | Efield _ _ _ =>
       OK tt
   | _ =>
       Error (msg "not a l-value")
@@ -771,6 +778,15 @@ Definition eselection (r1 r2 r3: expr) : res expr :=
   do ty <- type_conditional (typeof r2) (typeof r3);
   OK (Eselection r1 r2 r3 ty).
 
+(* Derived operators  *)
+Definition eindex (r1 r2:expr) : res expr :=
+  (* emulate r1[r2] as *(r1 + r2) *)
+  do ra  <- ebinop Oadd r1 r2;
+  do r'  <- ederef ra ;
+  OK (Eindex r1 r2 (typeof r')).
+
+(* end derived operators *)
+
 Definition sdo (a: expr) : res statement :=
   do x <- check_rval a; OK (Sdo a).
 
@@ -822,6 +838,10 @@ Fixpoint retype_expr (ce: composite_env) (e: typenv) (a: expr) : res expr :=
       do l' <- retype_expr ce e l; evalof l'
   | Ederef r _ =>
       do r' <- retype_expr ce e r; ederef r'
+  | Eindex r1 r2 _ =>
+      do r1' <- retype_expr ce e r1 ;
+      do r2' <- retype_expr ce e r2 ;
+      eindex r1' r2'
   | Eaddrof l _ =>
       do l' <- retype_expr ce e l; eaddrof l'
   | Eunop op r _ =>
@@ -977,7 +997,8 @@ Qed.
 Lemma check_rval_sound:
   forall a x, check_rval a = OK x -> expr_kind a = RV.
 Proof.
-  unfold check_rval; intros. destruct a; reflexivity || discriminate.
+  unfold check_rval; intros. destruct a; try (reflexivity || discriminate).
+
 Qed.
 
 Lemma check_lval_sound:
@@ -1109,6 +1130,7 @@ Proof.
   intros. monadInv H. eauto with ty.
 Qed.
 
+
 Lemma efield_sound:
   forall r f a, efield ce r f = OK a -> wt_expr ce e r -> wt_expr ce e a.
 Proof.
@@ -1176,6 +1198,16 @@ Lemma ebinop_sound:
 Proof.
   intros. monadInv H. eauto with ty.
 Qed.
+
+Lemma eindex_sound:
+  forall r1 r2 a, eindex r1 r2 = OK a -> wt_expr ce e r1 -> wt_expr ce e r2 -> wt_expr ce e a.
+Proof.
+  intros. monadInv H.
+  monadInv EQ. monadInv EQ1.
+  eauto with ty.
+Qed.
+
+
 
 Lemma ecast_sound:
   forall ty r a, ecast ty r = OK a -> wt_expr ce e r -> wt_expr ce e a.
@@ -1339,6 +1371,7 @@ Proof.
 + eapply efield_sound; eauto.
 + eapply evalof_sound; eauto.
 + eapply ederef_sound; eauto.
++ eapply eindex_sound; eauto.
 + eapply eaddrof_sound; eauto.
 + eapply eunop_sound; eauto.
 + eapply ebinop_sound; eauto.

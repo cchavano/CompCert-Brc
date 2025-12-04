@@ -34,6 +34,7 @@ Fixpoint simple (a: expr) : Prop :=
   | Eloc _ _ _ _ => True
   | Evar _ _ => True
   | Ederef r _ => simple r
+  | Eindex r1 r2 _ => simple r1 /\ simple r2
   | Efield l1 _ _ => simple l1
   | Eval _ _ => True
   | Evalof l _ => simple l
@@ -79,6 +80,11 @@ Inductive eval_simple_lvalue: expr -> block -> ptrofs -> bitfield -> Prop :=
   | esl_deref: forall r ty b ofs,
       eval_simple_rvalue r (Vptr b ofs) ->
       eval_simple_lvalue (Ederef r ty) b ofs Full
+  | esl_index: forall r1 r2 v1 v2 ty b ofs,
+      eval_simple_rvalue r1 v1 ->
+      eval_simple_rvalue r2 v2 ->
+      sem_binary_operation ge Oadd v1 (typeof r1) v2 (typeof r2) m = Some (Vptr b ofs) ->
+      eval_simple_lvalue (Eindex r1 r2 ty) b ofs Full
   | esl_field_struct: forall r f ty b ofs id co a delta bf,
       eval_simple_rvalue r (Vptr b ofs) ->
       typeof r = Tstruct id a -> ge.(genv_cenv)!id = Some co -> field_offset ge f (co_members co) = OK (delta, bf) ->
@@ -169,11 +175,15 @@ Lemma lred_compat:
   m = m' /\ compat_eval LV e l l' m.
 Proof.
   induction 1; simpl; split; auto; split; auto; intros bx ofsx bf' EV; inv EV.
-  apply esl_var_local; auto.
-  apply esl_var_global; auto.
-  constructor. constructor.
-  eapply esl_field_struct; eauto. constructor. simpl; eauto.
-  eapply esl_field_union; eauto. constructor. simpl; eauto.
+  - apply esl_var_local; auto.
+  - apply esl_var_global; auto.
+  - (* deref *) constructor. constructor.
+  - (* index *)
+    econstructor. constructor. constructor. auto.
+  - (* field *)
+    eapply esl_field_struct; eauto. constructor. simpl; eauto.
+  - (* union *)
+    eapply esl_field_union; eauto. constructor. simpl; eauto.
 Qed.
 
 Lemma rred_simple:
@@ -212,33 +222,40 @@ Lemma compat_eval_context:
 Proof.
   induction 1; intros CE; auto;
   try (generalize (IHcontext CE); intros [TY EV]; red; split; simpl; auto; intros).
-  inv H0. constructor; auto.
-  inv H0.
+  - (* deref *) inv H0. constructor; auto.
+  - (* index *) inv H0.
+    econstructor. eauto. eauto.
+    congruence.
+  - (* index *)
+    inv H0.
+    econstructor. eauto. eauto.
+    congruence.
+  -  inv H0.
     eapply esl_field_struct; eauto. rewrite TY; eauto.
     eapply esl_field_union; eauto. rewrite TY; eauto.
-  inv H0. econstructor. eauto. auto. auto.
-  inv H0. econstructor; eauto.
-  inv H0. econstructor; eauto. congruence.
-  inv H0. econstructor; eauto. congruence.
-  inv H0. econstructor; eauto. congruence.
-  inv H0. econstructor; eauto. congruence.
-  inv H0.
+  - inv H0. econstructor. eauto. auto. auto.
+  - inv H0. econstructor; eauto.
+  - inv H0. econstructor; eauto. congruence.
+  - inv H0. econstructor; eauto. congruence.
+  - inv H0. econstructor; eauto. congruence.
+  - inv H0. econstructor; eauto. congruence.
+  - inv H0.
     eapply esr_seqand_true; eauto. rewrite TY; auto.
     eapply esr_seqand_false; eauto. rewrite TY; auto.
-  inv H0.
+  - inv H0.
     eapply esr_seqor_false; eauto. rewrite TY; auto.
     eapply esr_seqor_true; eauto. rewrite TY; auto.
-  inv H0. eapply esr_condition; eauto. congruence.
-  inv H0.
-  inv H0.
-  inv H0.
-  inv H0.
-  inv H0.
-  inv H0.
-  red; split; intros. auto. inv H0.
-  red; split; intros. auto. inv H0.
-  inv H0. econstructor; eauto.
-  inv H0. econstructor; eauto. congruence.
+  - inv H0. eapply esr_condition; eauto. congruence.
+  - inv H0.
+  - inv H0.
+  - inv H0.
+  - inv H0.
+  - inv H0.
+  - inv H0.
+  - red; split; intros. auto. inv H0.
+  - red; split; intros. auto. inv H0.
+  - inv H0. econstructor; eauto.
+  - inv H0. econstructor; eauto. congruence.
 Qed.
 
 Lemma simple_context_1:

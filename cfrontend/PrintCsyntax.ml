@@ -149,6 +149,7 @@ let rec precedence = function
   | Eloc _ -> (16, NA)
   | Evar _ -> (16, NA)
   | Ederef _ -> (15, RtoL)
+  | Eindex _ -> (16, LtoR) (* TODO : check precedence of array access *)
   | Efield _ -> (16, LtoR)
   | Eval _ -> (16, NA)
   | Evalof(l, _) -> precedence l
@@ -224,6 +225,9 @@ let rec expr p (prec, e) =
       fprintf p "%s" (extern_atom id)
   | Ederef(a1, _) ->
       fprintf p "*%a" expr (prec', a1)
+  | Eindex(a1,a2,_) ->
+      fprintf p "%a[%a] "
+                 expr (prec', a1)  expr (0, a2)
   | Efield(a1, f, _) ->
       fprintf p "%a.%s" expr (prec', a1) (extern_atom f)
   | Evalof(l, _) ->

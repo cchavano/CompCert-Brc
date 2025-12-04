@@ -70,6 +70,9 @@ let rec expr p = function
       fprintf p "@[<hov 2>(Evalof@ %a@ %a)@]" expr l typ t
   | Ederef(a1, t) ->
       fprintf p "@[<hov 2>(Ederef@ %a@ %a)@]" expr a1 typ t
+  | Eindex(a1,a2,t) -> 
+      fprintf p "@[<hov 2>(Eindex %a@ %a@ %a)@]"
+        expr a1 expr a2 typ t
   | Eaddrof(a1, t) ->
       fprintf p "@[<hov 2>(Eaddrof@ %a@ %a)@]" expr a1 typ t
   | Eunop(op, a1, t) ->

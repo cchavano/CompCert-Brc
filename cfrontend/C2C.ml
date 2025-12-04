@@ -1018,8 +1018,7 @@ and convertLvalue env e =
       ewrap (Ctyping.efield !comp_env e3' (intern_string id))
   | C.EBinop(C.Oindex, e1, e2, _) ->
       let e1' = convertExpr env e1 and e2' = convertExpr env e2 in
-      let e3' = ewrap (Ctyping.ebinop Cop.Oadd e1' e2') in
-      ewrap (Ctyping.ederef e3')
+      ewrap (Ctyping.eindex e1' e2') 
   | C.EConst(C.CStr s) ->
       let ty = typeStringLiteral s in
       Evar(name_for_string_literal s, ty)
