@@ -226,7 +226,7 @@ let rec expr p (prec, e) =
   | Ederef(a1, _) ->
       fprintf p "*%a" expr (prec', a1)
   | Eindex(a1,a2,_) ->
-      fprintf p "%a[%a] "
+      fprintf p "%a[%a]"
                  expr (prec', a1)  expr (0, a2)
   | Efield(a1, f, _) ->
       fprintf p "%a.%s" expr (prec', a1) (extern_atom f)
