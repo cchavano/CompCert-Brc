@@ -1,27 +1,20 @@
 opam-version: "2.0"
 name: "CompCert-Ce"
 version: "3.16-20260122ce"
-synopsis: "The CompCert C compiler (64 bit)"
+synopsis: "The CompCert C compiler for Barocq (64 bit)"
 maintainer: "Michael Soegtrop and Xavier Leroy"
 authors: "Xavier Leroy <xavier.leroy@college-de-france.fr>"
 license: "INRIA Non-Commercial License Agreement"
-tags: [
-  "category:Computer Science/Semantics and Compilation/Compilation"
-  "category:Computer Science/Semantics and Compilation/Semantics"
-  "keyword:C"
-  "keyword:compiler"
-  "logpath:compcert"
-  "date:2025-07-04"
-]
-homepage: "https://compcert.org/"
-bug-reports: "https://github.com/fajb/CompCert/tree/ClightCe"
+homepage: "https://gitlab.inria.fr/cchavano/compcert-ce"
+bug-reports: "https://gitlab.inria.fr/cchavano/compcert-ce/-/issues"
 depends: [
-  "coq" {>= "8.13.0" & < "8.21~"}
-  "menhir" {>= "20200624" & != "dev"}
+  "coq" {>= "8.15.0" & < "9.1~"}
+  "menhir" {>= "20200624" & != "dev" & <= "20250912"}
   "ocaml" {>= "4.05.0" & < "5~"}
   "coq-flocq" {>= "4.1.0" & < "5~"}
   "coq-menhirlib" {>= "20200624"}
 ]
+conflicts: ["coq-compcert"]
 build: [
   [
     "./configure"
