@@ -403,9 +403,9 @@ fi
 #
 if test "$arch" = "riscV"; then
   if test "$model" = "64"; then
-    model_options="-march=rv64imafd -mabi=lp64d"
+    model_options="-mabi=lp64d"
   else
-    model_options="-march=rv32imafd -mabi=ilp32d"
+    model_options="-mabi=ilp32d"
   fi
   abi="standard"
   cc_options="$model_options"
@@ -436,7 +436,7 @@ if test "$arch" = "aarch64"; then
         clinker="${toolprefix}cc"
         clinker_needs_no_pie=false
         cprepro="${toolprefix}cc"
-        cprepro_options="-arch arm64 -U__GNUC__ -U__clang__ -U__BLOCKS__ '-D__attribute__(x)=' '-D__asm(x)=' '-D_Nullable=' '-D_Nonnull=' '-D__DARWIN_OS_INLINE=static inline' -Wno-\\#warnings -E"
+        cprepro_options="-arch arm64 -U__GNUC__ -U__clang__ -U__BLOCKS__ '-D__attribute__(x)=' '-D__asm(x)=' '-D_Nullable=' '-D_Nonnull=' '-D__DARWIN_OS_INLINE=static inline' -Wno-\\#warnings -Wno-builtin-macro-redefined -E"
         libmath=""
         system="macos"
         pic_supported=true
@@ -535,14 +535,14 @@ missingtools=false
 echo "Testing Coq... " | tr -d '\n'
 coq_ver=$(${COQBIN}coqc --print-version 2>/dev/null | tr -d '\r' | cut -d' ' -f1)
 case "$coq_ver" in
-  8.15.0|8.15.1|8.15.2|8.16.0|8.16.1|8.17.0|8.17.1|8.18.0|8.19.0|8.19.1|8.19.2|8.20.0|8.20.1|9.0.0)
+  8.15.0|8.15.1|8.15.2|8.16.0|8.16.1|8.17.0|8.17.1|8.18.0|8.19.0|8.19.1|8.19.2|8.20.0|8.20.1|9.0.0|9.1.0)
         echo "version $coq_ver -- good!";;
   ?*)
         echo "version $coq_ver -- UNSUPPORTED"
         if $ignore_coq_version; then
             echo "Warning: this version of Coq is unsupported, proceed at your own risks."
         else
-            echo "Error: CompCert requires a version of Coq between 8.15 and 9.0"
+            echo "Error: CompCert requires a version of Coq between 8.15 and 9.1"
             missingtools=true
         fi;;
   "")
