@@ -209,15 +209,22 @@ let print_typed_value p v ty =
 
 let print_value p v = print_typed_value p v Tvoid
 
+let is_evalof e =
+  match e with
+  | Evalof _ -> true
+  | _ -> false
+
 let rec expr p (prec, e) =
   let (prec', assoc) = precedence e in
   let (prec1, prec2) =
     if assoc = LtoR
     then (prec', prec' + 1)
     else (prec' + 1, prec') in
-  if prec' < prec
-  then fprintf p "@[<hov 2>("
-  else fprintf p "@[<hov 2>";
+  if not (is_evalof e) then begin
+    if prec' < prec
+    then fprintf p "@[<hov 2>("
+    else fprintf p "@[<hov 2>"
+  end;
   begin match e with
   | Eloc(b, ofs, _, _) ->
       fprintf p "<loc%a>" !print_pointer_hook (b, ofs)
@@ -295,7 +302,9 @@ let rec expr p (prec, e) =
   | Eparen(a1, tycast, ty) ->
       fprintf p "(%s) %a" (name_type tycast) expr (prec', a1)
   end;
-  if prec' < prec then fprintf p ")@]" else fprintf p "@]"
+  if not (is_evalof e) then begin
+    if prec' < prec then fprintf p ")@]" else fprintf p "@]"
+  end
 
 and exprlist p (first, rl) =
   match rl with
