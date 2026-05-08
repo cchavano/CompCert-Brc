@@ -516,9 +516,14 @@ let print_init p = function
   | Init_space n -> fprintf p "/* skip %s */@ " (Z.to_string n)
   | Init_addrof(symb, ofs) ->
       let ofs = camlint_of_coqint ofs in
+      let prefix =
+        if !src = Lang_barocq && List.mem symb !glob_arrays
+        then ""
+        else "&"
+      in
       if ofs = 0l
-      then fprintf p "&%s" (extern_atom symb)
-      else fprintf p "(void *)((char *)&%s + %ld)" (extern_atom symb) ofs
+      then fprintf p "%s%s" prefix (extern_atom symb)
+      else fprintf p "(void *)((char *)%s%s + %ld)" prefix (extern_atom symb) ofs
 
 let print_composite_init p il =
   fprintf p "{@ ";

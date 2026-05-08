@@ -63,3 +63,5 @@ let rec fill_enum_constr_names (types: composite_definition list) : unit =
       | _ -> ()
       end;
       fill_enum_constr_names types'
+
+let glob_arrays : (positive list) ref = ref []
