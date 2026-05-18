@@ -1,7 +1,7 @@
 opam-version: "2.0"
 name: "CompCert-Ce"
 version: "3.17-20260508ce"
-synopsis: "The CompCert C compiler for Barocq (64 bit)"
+synopsis: "The CompCert C compiler for Barocq (RISC-V 64 bit)"
 maintainer: "Michael Soegtrop and Xavier Leroy"
 authors: "Xavier Leroy <xavier.leroy@college-de-france.fr>"
 license: "INRIA Non-Commercial License Agreement"
