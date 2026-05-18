@@ -1747,26 +1747,35 @@ Proof.
   }
 Qed.
 
-
-Lemma tr_lblstmts_select_switch_case : forall sl tls n tmp,
+Lemma tr_lblstmts_select_switch_case : forall ce sl tls n tmp s,
     tr_lblstmts sl tls tmp->
-    option_rel (fun sl1 sl2 => tr_lblstmts sl1 sl2 tmp) (ClightCe.select_switch_case n sl)
-               (select_switch_case n tls).
+    ClightCe.select_switch_case ce n sl = OK s ->
+    exists s', select_switch_case ce n tls = OK s' /\
+                  option_rel (fun sl1 sl2 => tr_lblstmts sl1 sl2 tmp) s s'.
 Proof.
   intros.
+  revert s H0.
   induction H.
-  - simpl. constructor.
+  - simpl. intros. inv H0. eexists. split; eauto.
+    constructor.
   - simpl.
     destruct c;auto.
-    destruct (zeq z n);auto.
-    econstructor.
-    econstructor ;eauto.
-    + inv IHtr_lblstmts.
-      constructor.
-      constructor. eapply tr_lblstmts_mono; eauto.
-    + inv IHtr_lblstmts.
-      constructor.
-      constructor. eapply tr_lblstmts_mono; eauto.
+    destruct (eval_switch_val ce s0) eqn:ES; try discriminate.
+    + destruct (zeq z n);auto.
+      * intros. inv H4.
+        econstructor. split. econstructor.
+        econstructor.
+        econstructor ;eauto.
+      * intros.
+        destruct (IHtr_lblstmts _ H4) as (s' & SSC & R).
+        eexists; split; eauto.
+        inv R. constructor.
+        constructor. eapply tr_lblstmts_mono;eauto.
+    + intros.
+        destruct (IHtr_lblstmts _ H4) as (s' & SSC & R).
+        eexists; split; eauto.
+        inv R. constructor.
+        constructor. eapply tr_lblstmts_mono;eauto.
 Qed.
 
 Lemma tr_lblstmts_select_switch_default : forall sl tls tmp,
@@ -1782,6 +1791,31 @@ Proof.
     eapply tr_lblstmts_mono; eauto.
     econstructor ;eauto.
 Qed.
+
+
+Lemma tr_lblstmts_select_switch : forall ce sl tls n tmp s,
+    tr_lblstmts sl tls tmp->
+    ClightCe.select_switch ce n sl = OK s ->
+    exists s', select_switch ce n tls = OK s' /\
+                  tr_lblstmts s s' tmp.
+Proof.
+  intros.
+  unfold ClightCe.select_switch in H0.
+  monadInv H0.
+  exploit tr_lblstmts_select_switch_case;eauto.
+  intros (s' & SC & R).
+  destruct x ; inv EQ0.
+  - inv R.
+    unfold select_switch.
+    rewrite SC. simpl.
+    eexists ; split; eauto.
+  - inv R.
+    unfold select_switch.
+    rewrite SC. simpl.
+    eexists; split; eauto.
+    eapply tr_lblstmts_select_switch_default    ; eauto.
+Qed.
+
 
 Lemma tr_expression_nolabel : forall c s a tmp,
     tr_expression c s a tmp -> forall lb, nolabel lb s.
@@ -2570,23 +2604,28 @@ Proof.
   simpl. tauto.
 Qed.
 
-Lemma temps_of_lbstmts_select_switch : forall n sl,
-    incl (temps_of_lbstmts (ClightCe.select_switch n sl))  (temps_of_lbstmts sl).
+Lemma temps_of_lbstmts_select_switch : forall ce n sl s,
+    ClightCe.select_switch ce n sl = OK s ->
+    incl (temps_of_lbstmts s)  (temps_of_lbstmts sl).
 Proof.
   unfold ClightCe.select_switch.
-  intros.
-  destruct (ClightCe.select_switch_case n sl) eqn:SEL.
-  - revert l SEL.
+  intros. unfold Errors.bind in H.
+  destruct (ClightCe.select_switch_case ce n sl) eqn:SEL; try discriminate.
+  destruct o. inv H.
+  - revert s SEL.
     induction sl; simpl; try discriminate.
-    destruct o. destruct (zeq z n).
+    destruct o. destruct (eval_switch_val ce s0) eqn:ES.
+    destruct (zeq z n).
     intros. inv SEL.
     simpl. apply incl_refl.
     intros.
     apply IHsl in SEL.
     apply incl_appr. auto.
+    intros. discriminate.
     intros.
     apply incl_appr. auto.
-  - clear SEL. induction sl; simpl.
+  - inv H.
+    clear SEL. induction sl; simpl.
     apply incl_refl.
     destruct o.
     eapply incl_tran.
@@ -2855,6 +2894,8 @@ inv H; inv MS.
   eauto.
   econstructor ;auto. eauto.
 - inv TR.
+  exploit tr_lblstmts_select_switch; eauto.
+  intros (s'& SSW' & R).
   eexists.
   split.
   left.
@@ -2862,23 +2903,14 @@ inv H; inv MS.
   econstructor;auto.
   eapply eval_expr_same;eauto.
   eauto.
-  econstructor ;eauto.
+  rewrite comp_env_preserved. eauto.
+  econstructor; eauto.
   rewrite seq_of_labeled_statement_eq. simpl in TEMPS.
   eapply all_below_incl.
   rewrite all_below_app in TEMPS.
-  destruct TEMPS. apply H2.
-  apply temps_of_lbstmts_select_switch.
+  destruct TEMPS. eauto.
+  eapply temps_of_lbstmts_select_switch; eauto.
   apply tr_seq_of_labeled_statement .
-  assert (H3' := H3).
-  apply tr_lblstmts_select_switch_case with (n:=n) in H3.
-  unfold ClightCe.select_switch, select_switch.
-  destruct (ClightCe.select_switch_case n sl);
-    destruct (select_switch n tls); inv H3; auto.
-  eapply tr_lblstmts_mono;eauto.
-  eapply tr_lblstmts_mono;eauto.
-  apply tr_lblstmts_select_switch_default  ; auto.
-  eapply tr_lblstmts_mono;eauto.
-  apply tr_lblstmts_select_switch_default  ; auto.
   eapply tr_lblstmts_mono;eauto.
   constructor;auto.
 -  inv MK.

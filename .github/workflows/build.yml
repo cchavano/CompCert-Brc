@@ -56,8 +56,7 @@ jobs:
           submodules: true
       - name: OS dependencies
         run: |
-          brew install coq ocaml
-          brew install --build-from-source menhir  # temporary workaround
+          brew install coq ocaml menhir
       - name: Configure
         run: tools/runner.sh configure
       - name: Build
@@ -66,3 +65,5 @@ jobs:
         run: tools/runner.sh test1
       - name: Test alternate configuration
         run: tools/runner.sh test2
+      - name: Test alternate configuration 2
+        run: tools/runner.sh test3

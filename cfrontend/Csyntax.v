@@ -35,6 +35,7 @@ Inductive expr : Type :=
                                (**r access to a member of a struct or union *)
   | Evalof (l: expr) (ty: type)              (**r l-value used as a r-value *)
   | Ederef (r: expr) (ty: type)        (**r pointer dereference (unary [*]) *)
+  | Eindex (r1 r2:expr) (ty:type)      (**r array access (e1[e2])           *)
   | Eaddrof (l: expr) (ty: type)            (**r address-of operators ([&]) *)
   | Eunop (op: unary_operation) (r: expr) (ty: type)
                                             (**r unary arithmetic operation *)
@@ -91,8 +92,8 @@ Some C expressions are derived forms.  Array access [r1[r2]] is expressed
 as [*(r1 + r2)].
 *)
 
-Definition Eindex (r1 r2: expr) (ty: type) :=
-  Ederef (Ebinop Oadd r1 r2 (Tpointer ty noattr)) ty.
+(* Definition Eindex (r1 r2: expr) (ty: type) :=
+   Ederef (Ebinop Oadd r1 r2 (Tpointer ty noattr)) ty. *)
 
 (** Pre-increment [++l] and pre-decrement [--l] are expressed as
     [l += 1] and [l -= 1], respectively. *)
@@ -120,6 +121,7 @@ Definition typeof (a: expr) : type :=
   | Eloc _ _ _ ty => ty
   | Evar _ ty => ty
   | Ederef _ ty => ty
+  | Eindex _ _ ty => ty
   | Efield _ _ ty => ty
   | Eval _ ty => ty
   | Evalof _ ty => ty

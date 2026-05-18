@@ -118,6 +118,7 @@ COQDEP="$(COQBIN)coqdep" $(COQINCLUDES)
 COQDOC="$(COQBIN)coqdoc"
 COQEXEC="$(COQBIN)coqtop" $(COQINCLUDES) $(COQEXTRACTOPTS) -batch -load-vernac-source
 COQCHK="$(COQBIN)coqchk" $(COQINCLUDES)
+COQ2HTML=coq2html
 MENHIR=menhir
 CP=cp
 
@@ -282,7 +283,7 @@ FORCE:
 documentation: $(FILES)
 	mkdir -p doc/html
 	rm -f doc/html/*.html
-	coq2html -d doc/html/ -base compcert -short-names \
+	$(COQ2HTML) -d doc/html/ -base compcert -short-names \
 	  $(patsubst %, %/*.glob, $(DIRS)) \
           $(filter-out cparser/Parser.v, $^)
 
@@ -331,7 +332,8 @@ compcert.ini: Makefile.config
          echo "has_runtime_lib=$(HAS_RUNTIME_LIB)"; \
          echo "has_standard_headers=$(HAS_STANDARD_HEADERS)"; \
          echo "asm_supports_cfi=$(ASM_SUPPORTS_CFI)"; \
-	 echo "response_file_style=$(RESPONSEFILE)";) \
+	 echo "response_file_style=$(RESPONSEFILE)"; \
+	 echo "pic_supported=$(PIC_SUPPORTED)") \
         > compcert.ini
 
 compcert.config: Makefile.config

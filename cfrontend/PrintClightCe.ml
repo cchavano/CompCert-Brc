@@ -22,6 +22,7 @@ open PrintAST
 open Ctypes
 open PrintCsyntax
 open ClightCe
+open Barocq2C
 
 let precedence_cexpr = function
   | CE_expr _  -> (16,NA)
@@ -135,7 +136,7 @@ and print_cases p cases =
 
 and print_case_label p = function
   | None -> fprintf p "default"
-  | Some lbl -> fprintf p "case %s" (Z.to_string lbl)
+  | Some lbl -> fprintf p "case %s" (PrintClight.string_of_switch_val lbl)
 
 and print_stmt_for p s =
   match s with
@@ -181,8 +182,8 @@ type clight_version = Clight1 | Clight2
 let name_param = function Clight1 -> extern_atom | Clight2 -> PrintClight.temp_name
 
 let print_function ver p id f =
-  fprintf p "%s@ "
-            (name_cdecl (name_function_parameters (name_param ver)
+  fprintf p "%s%s@ "
+             (fundef_attribs id) (name_cdecl (name_function_parameters (name_param ver)
                                  (extern_atom id) f.fn_params f.fn_callconv)
                         f.fn_return);
   fprintf p "@[<v 2>{@ ";
@@ -216,8 +217,8 @@ let print_fundecl p id fd =
   | Ctypes.External(_, _, _, _) ->
       ()
   | Internal f ->
-      fprintf p "%s;@ "
-                (name_cdecl (extern_atom id) (type_of_function f))
+      fprintf p "%s%s;@ "
+                 (fundecl_attribs id) (name_cdecl (extern_atom id) (type_of_function f))
 
 let print_globdef var p (id, gd) =
   match gd with

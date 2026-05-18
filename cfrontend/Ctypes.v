@@ -78,7 +78,8 @@ Inductive type : Type :=
   | Tarray: type -> Z -> attr -> type              (**r array types ([ty[len]]) *)
   | Tfunction: list type -> type -> calling_convention -> type    (**r function types *)
   | Tstruct: ident -> attr -> type                 (**r struct types *)
-  | Tunion: ident -> attr -> type.                  (**r union types *)
+  | Tunion: ident -> attr -> type                  (**r union types *)
+  | Tenum : ident -> attr -> type.                 (**r enum types *)
 
 Lemma intsize_eq: forall (s1 s2: intsize), {s1=s2} + {s1<>s2}.
 Proof.
@@ -126,6 +127,7 @@ Definition attr_of_type (ty: type) :=
   | Tfunction args res cc => noattr
   | Tstruct id a => a
   | Tunion id a => a
+  | Tenum  id a => a
   end.
 
 (** Change the top-level attributes of a type *)
@@ -141,6 +143,7 @@ Definition change_attributes (f: attr -> attr) (ty: type) : type :=
   | Tfunction args res cc => ty
   | Tstruct id a => Tstruct id (f a)
   | Tunion id a => Tunion id (f a)
+  | Tenum id a  => Tenum id (f a)
   end.
 
 (** Erase the top-level attributes of a type *)
@@ -177,7 +180,8 @@ Definition bitsize_intsize (sz: intsize) : Z :=
   are collectively called "composites".  Each compilation unit
   comes with a list of top-level definitions of composites. *)
 
-Inductive struct_or_union : Type := Struct | Union.
+Inductive struct_or_union : Type := Struct | Union
+                               | Enum. (* boldly encode enumeration types as a struct_or_union *)
 
 Inductive member : Type :=
   | Member_plain (id: ident) (t: type)
@@ -299,7 +303,7 @@ Fixpoint complete_type (env: composite_env) (t: type) : bool :=
   | Tpointer _ _ => true
   | Tarray t' _ _ => complete_type env t'
   | Tfunction _ _ _ => false
-  | Tstruct id _ | Tunion id _ =>
+  | Tstruct id _ | Tunion id _ | Tenum id _ =>
       match env!id with Some co => true | None => false end
   end.
 
@@ -339,8 +343,9 @@ Fixpoint alignof (env: composite_env) (t: type) : Z :=
       | Tpointer _ _ => if Archi.ptr64 then 8 else 4
       | Tarray t' _ _ => alignof env t'
       | Tfunction _ _ _ => 1
-      | Tstruct id _ | Tunion id _ =>
+      | Tstruct id _ | Tunion id _  =>
           match env!id with Some co => co_alignof co | None => 1 end
+      | Tenum id _ => 4 (* same as Tint 32 *)
     end).
 
 Remark align_attr_two_p:
@@ -372,6 +377,7 @@ Proof.
   exists 0%nat; auto.
   destruct (env!i). apply co_alignof_two_p. exists 0%nat; auto.
   destruct (env!i). apply co_alignof_two_p. exists 0%nat; auto.
+  exists 2%nat; reflexivity.
 Qed.
 
 Lemma alignof_pos:
@@ -402,8 +408,9 @@ Fixpoint sizeof (env: composite_env) (t: type) : Z :=
   | Tpointer _ _ => if Archi.ptr64 then 8 else 4
   | Tarray t' n _ => sizeof env t' * Z.max 0 n
   | Tfunction _ _ _ => 1
-  | Tstruct id _ | Tunion id _ =>
+  | Tstruct id _ | Tunion id _  =>
       match env!id with Some co => co_sizeof co | None => 0 end
+  | Tenum id _  => 4 (* same as Tint I32 *)
   end.
 
 Lemma sizeof_pos:
@@ -419,6 +426,7 @@ Proof.
 - lia.
 - destruct (env!i). apply co_sizeof_pos. lia.
 - destruct (env!i). apply co_sizeof_pos. lia.
+- lia.
 Qed.
 
 (** The size of a type is an integral multiple of its alignment,
@@ -445,6 +453,7 @@ Proof.
 - apply Z.divide_refl.
 - destruct (env!i). apply co_sizeof_alignof. apply Z.divide_0_r.
 - destruct (env!i). apply co_sizeof_alignof. apply Z.divide_0_r.
+- apply Z.divide_refl.
 Qed.
 
 (** ** Layout of struct fields *)
@@ -917,7 +926,8 @@ Definition access_mode (ty: type) : mode :=
   | Tfunction _ _ _ => By_reference
   | Tstruct _ _ => By_copy
   | Tunion _ _ => By_copy
-end.
+  | Tenum _ _  => By_value Mint32
+  end.
 
 (** For the purposes of the semantics and the compiler, a type denotes
   a volatile access if it carries the [volatile] attribute and it is
@@ -948,11 +958,12 @@ Fixpoint alignof_blockcopy (env: composite_env) (t: type) : Z :=
   | Tpointer _ _ => if Archi.ptr64 then 8 else 4
   | Tarray t' _ _ => alignof_blockcopy env t'
   | Tfunction _ _ _ => 1
-  | Tstruct id _ | Tunion id _ =>
+  | Tstruct id _ | Tunion id _  =>
       match env!id with
       | Some co => Z.min 8 (co_alignof co)
       | None => 1
       end
+  | Tenum id _ => 4 (* same as Tint I32 *)
   end.
 
 Lemma alignof_blockcopy_1248:
@@ -977,6 +988,7 @@ Proof.
   destruct Archi.ptr64; auto.
   apply IHty.
   auto.
+  destruct (env!i); auto.
   destruct (env!i); auto.
   destruct (env!i); auto.
 Qed.
@@ -1014,6 +1026,7 @@ Proof.
   apply Z.divide_refl.
   destruct (env!i). apply X. apply Z.divide_0_r.
   destruct (env!i). apply X. apply Z.divide_0_r.
+  apply  Z.divide_refl.
 Qed.
 
 (** Type ranks *)
@@ -1059,6 +1072,7 @@ Definition typ_of_type (t: type) : AST.typ :=
   | Tfloat F32 _ => AST.Tsingle
   | Tfloat F64 _ => AST.Tfloat
   | Tpointer _ _ | Tarray _ _ _ | Tfunction _ _ _ | Tstruct _ _ | Tunion _ _ => AST.Tptr
+  | Tenum _ _ => AST.Tint
   end.
 
 Definition argtype_of_type (t: type) : xtype :=
@@ -1075,6 +1089,7 @@ Definition argtype_of_type (t: type) : xtype :=
   | Tfloat F64 _ => Xfloat
   | Tpointer _ _ => Xptr
   | Tarray _ _ _ | Tfunction _ _ _ | Tstruct _ _ | Tunion _ _ => Xptr
+  | Tenum _ _ => Xint
   end.
 
 (** In CompCert C, array, function, struct and union types cannot
@@ -1094,6 +1109,7 @@ Definition rettype_of_type (t: type) : xtype :=
   | Tfloat F64 _ => AST.Xfloat
   | Tpointer _ _ => AST.Xptr
   | Tarray _ _ _ | Tfunction _ _ _ | Tstruct _ _ | Tunion _ _ => AST.Xvoid
+  | Tenum _ _ => AST.Xint
   end.
 
 Definition signature_of_type (args: list type) (res: type) (cc: calling_convention): signature :=
@@ -1105,6 +1121,7 @@ Definition sizeof_composite (env: composite_env) (su: struct_or_union) (m: membe
   match su with
   | Struct => sizeof_struct env m
   | Union  => sizeof_union env m
+  | Enum   => sizeof env (Tint I32 Signed noattr)
   end.
 
 Lemma sizeof_composite_pos:
@@ -1115,6 +1132,7 @@ Proof.
   assert (0 <= bitsizeof_struct env 0 m) by apply bitsizeof_struct_incr.
   change 0 with (0 / 8) at 1. apply Z.div_le_mono; lia.
 - apply sizeof_union_pos.
+- lia.
 Qed.
 
 Fixpoint complete_members (env: composite_env) (ms: members) : bool :=
@@ -1240,6 +1258,8 @@ Proof.
   erewrite extends by eauto. auto.
   destruct (env!i) as [co|] eqn:E; try discriminate.
   erewrite extends by eauto. auto.
+  destruct (env!i) as [co|] eqn:E; try discriminate.
+  erewrite extends by eauto. auto.
 Qed.
 
 Lemma rank_type_stable:
@@ -1290,6 +1310,7 @@ Proof.
   intros. destruct su; simpl.
   unfold sizeof_struct. f_equal. apply bitsizeof_struct_stable; auto.
   apply sizeof_union_stable; auto.
+  reflexivity.
 Qed.
 
 Lemma complete_members_stable:

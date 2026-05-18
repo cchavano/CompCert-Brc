@@ -1450,6 +1450,9 @@ Proof.
 (* tempvar *)
   exploit me_temps; eauto. intros [[tv [A B]] C].
   exists tv; split; auto. constructor; auto.
+(* enumlit *)
+  exists (Vint (Int.repr v)); split; auto.
+  econstructor;eauto.  rewrite comp_env_preserved; auto.
 (* addrof *)
   exploit eval_simpl_lvalue; eauto.
   destruct a; auto with compat.
@@ -1819,11 +1822,13 @@ Proof.
 Qed.
 
 Remark simpl_select_switch:
-  forall cenv n ls tls,
+  forall ce cenv n ls tls s,
   simpl_lblstmt cenv ls = OK tls ->
-  simpl_lblstmt cenv (select_switch n ls) = OK (select_switch n tls).
+  select_switch ce n ls = OK s ->
+  exists s',
+    select_switch ce n tls = OK s' /\ simpl_lblstmt cenv s = OK s'.
 Proof.
-  intros cenv n.
+  intros ce cenv n.
   assert (DFL:
     forall ls tls,
     simpl_lblstmt cenv ls = OK tls ->
@@ -1834,26 +1839,32 @@ Proof.
     simpl. destruct o. eauto. simpl; rewrite EQ, EQ1. auto.
   }
   assert (CASE:
-    forall ls tls,
+    forall ls tls s,
     simpl_lblstmt cenv ls = OK tls ->
-    match select_switch_case n ls with
-    | None => select_switch_case n tls = None
+    select_switch_case ce n ls = OK s ->
+    match s with
+    | None => select_switch_case ce n tls = OK None
     | Some ls' =>
-        exists tls', select_switch_case n tls = Some tls' /\ simpl_lblstmt cenv ls' = OK tls'
+        exists tls', select_switch_case ce n tls = OK (Some tls') /\ simpl_lblstmt cenv ls' = OK tls'
     end).
   {
     induction ls; simpl; intros; monadInv H; simpl.
-    auto.
-    destruct o.
-    destruct (zeq z n).
-    econstructor; split; eauto. simpl; rewrite EQ, EQ1; auto.
-    apply IHls. auto.
-    apply IHls. auto.
+    - inv H0. reflexivity.
+    -  destruct o.
+       destruct (eval_switch_val ce s1) eqn:ES; try discriminate.
+       destruct (zeq z n).
+       inv H0.
+       econstructor; split; eauto. simpl; rewrite EQ, EQ1; auto.
+    apply IHls; auto.
+    apply IHls; auto.
   }
-  intros; unfold select_switch.
-  specialize (CASE _ _ H). destruct (select_switch_case n ls) as [ls'|].
-  destruct CASE as [tls' [P Q]]. rewrite P, Q. auto.
-  rewrite CASE. apply DFL; auto.
+  intros; unfold select_switch in *.
+  monadInv H0.
+  specialize (CASE _ _ _ H EQ).
+  destruct x ; inv EQ0.
+  destruct CASE as [tls' [P Q]]. rewrite P, Q.
+  simpl. eexists ; split; eauto.
+  rewrite CASE. simpl. eexists ; split; eauto.
 Qed.
 
 Remark simpl_seq_of_labeled_statement:
@@ -1867,11 +1878,12 @@ Proof.
 Qed.
 
 Remark compat_cenv_select_switch:
-  forall cenv n ls,
+  forall ce cenv n s ls,
   compat_cenv (addr_taken_lblstmt ls) cenv ->
-  compat_cenv (addr_taken_lblstmt (select_switch n ls)) cenv.
+  select_switch ce n ls = OK s ->
+  compat_cenv (addr_taken_lblstmt s) cenv.
 Proof.
-  intros cenv n.
+  intros ce cenv n.
   assert (DFL: forall ls,
     compat_cenv (addr_taken_lblstmt ls) cenv ->
     compat_cenv (addr_taken_lblstmt (select_switch_default ls)) cenv).
@@ -1882,16 +1894,19 @@ Proof.
   }
   assert (CASE: forall ls ls',
     compat_cenv (addr_taken_lblstmt ls) cenv ->
-    select_switch_case n ls = Some ls' ->
+    select_switch_case ce n ls = OK (Some ls') ->
     compat_cenv (addr_taken_lblstmt ls') cenv).
   {
     induction ls; simpl; intros.
     discriminate.
-    destruct o. destruct (zeq z n). inv H0. auto. eauto with compat.
+    destruct o.
+    destruct (eval_switch_val  ce s0) eqn:ES ; try discriminate.
+    destruct (zeq z n). inv H0. auto. eauto with compat.
     eauto with compat.
   }
-  intros. specialize (CASE ls). unfold select_switch.
-  destruct (select_switch_case n ls) as [ls'|]; eauto.
+  intros. specialize (CASE ls). unfold select_switch in H0.
+  monadInv H0.
+  destruct x; inv EQ0; eauto.
 Qed.
 
 Remark addr_taken_seq_of_labeled_statement:
@@ -2166,17 +2181,20 @@ Proof.
 
 (* switch *)
   exploit eval_simpl_expr; eauto with compat. intros [tv [A B]].
+  exploit simpl_select_switch; eauto.
+  intros (s' & SS & SS').
   econstructor; split. apply plus_one. econstructor; eauto.
   rewrite typeof_simpl_expr. instantiate (1 := n).
   unfold sem_switch_arg in *;
   destruct (classify_switch (typeof a)); try discriminate;
   inv B; inv H0; auto.
+  rewrite comp_env_preserved. eauto.
   econstructor; eauto.
   erewrite simpl_seq_of_labeled_statement. reflexivity.
-  eapply simpl_select_switch; eauto.
+  eauto.
   econstructor; eauto. rewrite addr_taken_seq_of_labeled_statement.
-  apply compat_cenv_select_switch. eauto with compat.
-
+  eapply compat_cenv_select_switch. eauto with compat.
+  eauto.
 (* skip-break switch *)
   inv MCONT. econstructor; split.
   apply plus_one. eapply step_skip_break_switch. destruct H; subst x; simpl in *; intuition congruence.

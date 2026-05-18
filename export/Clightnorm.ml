@@ -65,7 +65,7 @@ let rec norm_expr e =
 
 and norm_expr_1 e =
   match e with
-  | Econst_int _ | Econst_float _ | Econst_single _ | Econst_long _ -> ([], e)
+  | Econst_int _ | Econst_float _ | Econst_single _ | Econst_long _ | Eenumlit _ -> ([], e)
   | Evar _ | Etempvar _ -> ([], e)
   | Ederef(e1, t) ->
       let (sl, e1') = norm_expr e1 in (sl, Ederef(e1', t))

@@ -211,6 +211,7 @@ Variable e: env.
 
 (** Head reduction for l-values. *)
 
+
 Inductive lred: expr -> mem -> expr -> mem -> Prop :=
   | red_var_local: forall x ty m b,
       e!x = Some(b, ty) ->
@@ -224,6 +225,9 @@ Inductive lred: expr -> mem -> expr -> mem -> Prop :=
   | red_deref: forall b ofs ty1 ty m,
       lred (Ederef (Eval (Vptr b ofs) ty1) ty) m
            (Eloc b ofs Full ty) m
+| red_index : forall v1 ty1 v2 ty2 ty m b ofs,
+    sem_binary_operation ge Oadd v1 ty1 v2 ty2 m = Some (Vptr b ofs) ->
+  lred (Eindex (Eval v1 ty1) (Eval v2 ty2) ty) m (Eloc b ofs Full ty) m
   | red_field_struct: forall b ofs id co a f ty m delta bf,
       ge.(genv_cenv)!id = Some co ->
       field_offset ge f (co_members co) = OK (delta, bf) ->
@@ -353,6 +357,10 @@ Inductive context: kind -> kind -> (expr -> expr) -> Prop :=
       context k k (fun x => x)
   | ctx_deref: forall k C ty,
       context k RV C -> context k LV (fun x => Ederef (C x) ty)
+  | ctx_index_left: forall k C  e2 ty,
+      context k RV C -> context k LV (fun x => Eindex (C x) e2 ty)
+  | ctx_index_right: forall k C  e1 ty,
+      context k RV C -> context k LV (fun x => Eindex e1 (C x) ty)
   | ctx_field: forall k C f ty,
       context k RV C -> context k LV (fun x => Efield (C x) f ty)
   | ctx_rvalof: forall k C ty,
@@ -462,7 +470,8 @@ Proof.
   set (x := inj_type t).
   set (sg := [Xint; x; x ---> x]%asttyp).
   assert (LK: lookup_builtin_function "__builtin_sel"%string sg = Some (BI_standard (BI_select t))).
-  { unfold sg, x, t; destruct ty as [ | ? ? ? | ? | [] ? | ? ? | ? ? ? | ? ? ? | ? ? | ? ? ];
+  {
+    unfold sg, x, t; destruct ty as [ | ? ? ? | ? | [] ? | ? ? | ? ? ? | ? ? ? | ? ? | ? ? | ? ?];
     simpl; unfold Tptr; destruct Archi.ptr64; reflexivity. }
   set (v' := if b then v2' else v3').
   assert (C: val_casted v' ty).

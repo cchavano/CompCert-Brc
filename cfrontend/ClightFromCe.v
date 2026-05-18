@@ -402,6 +402,7 @@ Fixpoint temps_of_expr (e:expr) :=
   | Econst_float _ _ => nil
   | Econst_single _ _ => nil
   | Econst_long _ _ => nil
+  | Eenumlit _ _    => nil
   | Evar _ _ => nil
   | Etempvar id _ => id::nil
   | Ederef e _ => temps_of_expr e

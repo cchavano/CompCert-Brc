@@ -44,6 +44,7 @@ let temp_name (id: AST.ident) =
 let precedence = function
   | Evar _ -> (16, NA)
   | Etempvar _ -> (16, NA)
+  | Eenumlit _ -> (16, NA)
   | Ederef _ -> (15, RtoL)
   | Efield _ -> (16, LtoR)
   | Econst_int _ -> (16, NA)
@@ -78,6 +79,7 @@ let rec expr p (prec, e) =
   begin match e with
   | Evar(id, _) ->
       fprintf p "%s" (extern_atom id)
+  | Eenumlit(id,_) -> fprintf p "%s" (extern_atom id)
   | Etempvar(id, _) ->
       fprintf p "%s" (temp_name id)
   | Ederef(a1, _) ->
@@ -123,6 +125,12 @@ let rec print_expr_list p (first, rl) =
       if not first then fprintf p ",@ ";
       expr p (2, r);
       print_expr_list p (false, rl)
+
+let string_of_switch_val  sw =
+  match sw with
+  | SwitchZ z -> (Z.to_string z)
+  | SwitchE(id, _) -> extern_atom id
+
 
 (* Statements *)
 
@@ -211,7 +219,7 @@ and print_cases p cases =
 
 and print_case_label p = function
   | None -> fprintf p "default"
-  | Some lbl -> fprintf p "case %s" (Z.to_string lbl)
+  | Some lbl -> fprintf p "case %s" (string_of_switch_val lbl)
 
 and print_stmt_for p s =
   match s with

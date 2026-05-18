@@ -505,6 +505,23 @@ Definition make_field_access (ce: composite_env) (ty: type) (f: ident) (a: expr)
     else Ebinop Oadd a (make_intconst (Int.repr ofs)) in
   OK (a', bf).
 
+(** * Translation of enumeration literals *)
+
+Definition transl_enum (ce:composite_env) (id:ident) (ty:type) : res Z :=
+  match ty with
+  | Tenum e _ =>
+      match ce!e with
+      | None => Error (POS e :: MSG " is not a declared type" :: nil)
+      | Some co =>
+          match find_enum_position id co.(co_members) with
+          | None => Error (POS id :: MSG " is not a member of (enum) type " :: POS e :: nil)
+          | Some v => OK v
+          end
+      end
+  | _      => Error (msg "an enumeration type is expected")
+  end.
+
+
 (** * Translation of expressions *)
 
 (** [transl_expr a] returns the Csharpminor code that computes the value
@@ -521,6 +538,9 @@ Fixpoint transl_expr (ce: composite_env) (a: Clight.expr) {struct a} : res expr 
       OK(make_singleconst n)
   | Clight.Econst_long n _ =>
       OK(make_longconst n)
+  | Clight.Eenumlit id ty =>
+      do i <- transl_enum ce id ty ;
+      OK(make_intconst (Int.repr i))
   | Clight.Evar id ty =>
       make_load (Eaddrof id) ty Full
   | Clight.Etempvar id ty =>
@@ -666,6 +686,21 @@ loop s1 s2          --->     block {
                              // break in s1 and s2 branches here
 *)
 
+Definition transl_switch_val (ce: composite_env) (s:switch_val) : res Z :=
+  match eval_switch_val ce s with
+  | None => Error (msg "Invalid switch element")
+  | Some z => OK z
+  end.
+
+Definition transl_option_switch_val (ce:composite_env) (s:option switch_val) : res (option Z) :=
+  match s with
+  | None => OK None
+  | Some v => do z <- transl_switch_val ce v ;
+              OK (Some z)
+  end.
+
+
+
 Fixpoint transl_statement (ce: composite_env) (tyret: type) (nbrk ncnt: nat)
                           (s: Clight.statement) {struct s} : res stmt :=
   match s with
@@ -740,7 +775,8 @@ with transl_lbl_stmt (ce: composite_env) (tyret: type) (nbrk ncnt: nat)
   | Clight.LScons n s sl' =>
       do ts <- transl_statement ce tyret nbrk ncnt s;
       do tsl' <- transl_lbl_stmt ce tyret nbrk ncnt sl';
-      OK (LScons n ts tsl')
+      do z    <- transl_option_switch_val ce n ;
+      OK (LScons z ts tsl')
   end.
 
 (*** Translation of functions *)

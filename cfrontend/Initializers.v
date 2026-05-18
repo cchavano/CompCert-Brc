@@ -405,10 +405,12 @@ Fixpoint transl_init_rec (ce: composite_env) (s: state)
       match co_su co with
       | Struct => transl_init_struct ce s (co_members co) il pos 0
       | Union  => Error (MSG "struct/union mismatch on " :: CTX id :: nil)
+      | Enum   => Error (MSG "struct/enum mismatch on " :: CTX id :: nil)
       end
   | Init_union f i1, Tunion id _ =>
       do co <- lookup_composite ce id;
       match co_su co with
+      | Enum   => Error (MSG "union/enum mismatch on " :: CTX id :: nil)
       | Struct => Error (MSG "union/struct mismatch on " :: CTX id :: nil)
       | Union =>  do ty1 <- field_type f (co_members co);
                   do (delta, layout) <- union_field_offset ce f (co_members co);

@@ -91,6 +91,8 @@ and rtyp p = function
       fprintf p "(Tstruct %a noattr)" ident id
   | Tunion(id, _) ->
       fprintf p "(Tunion %a noattr)" ident id
+  | Tenum(id, _) ->
+      fprintf p "(Tenum %a attr)" ident id
 
 and typlist p tl =
   print_list typ p tl
@@ -123,6 +125,6 @@ let print_member p = function
 let print_composite_definition p (Composite(id, su, m, a)) =
   fprintf p "@[<hv 2>Composite %a %s@ %a@ %a@]"
     ident id
-    (match su with Struct -> "Struct" | Union -> "Union")
+    (match su with Struct -> "Struct" | Union -> "Union" | Enum -> "Enum")
     (print_list print_member) m
     attribute a

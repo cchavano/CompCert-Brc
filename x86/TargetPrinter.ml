@@ -107,6 +107,7 @@ module type SYSTEM =
       val raw_symbol: out_channel -> string -> unit
       val symbol: out_channel -> P.t -> unit
       val symbol_paren: out_channel -> P.t -> unit
+      val symbol_function: out_channel -> P.t -> unit
       val label: out_channel -> int -> unit
       val name_of_section: section_name -> string
       val stack_alignment: int
@@ -136,6 +137,10 @@ module ELF_System : SYSTEM =
       if String.length s > 0 && s.[0] = '$'
       then fprintf oc "(%s)" s
       else fprintf oc "%s" s
+
+    let symbol_function oc symb =
+      symbol_paren oc symb;
+      if SelectOp.symbol_is_relocatable symb then fprintf oc "@PLT"
 
     let label = elf_label
 
@@ -205,6 +210,9 @@ module MacOS_System : SYSTEM =
 
     let symbol_paren = symbol
         (* the leading '_' protects the leading '$' *)
+
+    let symbol_function = symbol
+        (* no need for @PLT even in PIC mode *)
 
     let label oc lbl =
       fprintf oc "L%d" lbl
@@ -277,6 +285,8 @@ module Cygwin_System : SYSTEM =
       if String.length s > 0 && s.[0] = '$'
       then fprintf oc "(%a)" raw_symbol s
       else raw_symbol oc s
+
+    let symbol_function = symbol_paren
 
     let label oc lbl =
        fprintf oc "L%d" lbl
@@ -723,7 +733,7 @@ module Target(System: SYSTEM):TARGET =
       | Pjmp_l(l) ->
           fprintf oc "	jmp	%a\n" label (transl_label l)
       | Pjmp_s(f, sg) ->
-          fprintf oc "	jmp	%a\n" symbol_paren f
+          fprintf oc "	jmp	%a\n" symbol_function f
       | Pjmp_r(r, sg) ->
           fprintf oc "	jmp	*%a\n" ireg r
       | Pjcc(c, l) ->
@@ -749,7 +759,7 @@ module Target(System: SYSTEM):TARGET =
             fprintf oc "	jmp	*%a(, %a, 4)\n" label l ireg r
           end
       | Pcall_s(f, sg) ->
-          fprintf oc "	call	%a\n" symbol_paren f;
+          fprintf oc "	call	%a\n" symbol_function f;
           if (not Archi.ptr64) && sg.sig_cc.cc_structret then
             fprintf oc "	pushl	%%eax\n"
       | Pcall_r(r, sg) ->
@@ -853,12 +863,12 @@ module Target(System: SYSTEM):TARGET =
           begin match ef with
             | EF_annot(kind,txt, targs) ->
                 begin match (P.to_int kind) with
-                  | 1 ->  let annot = annot_text preg_annot "esp" (camlstring_of_coqstring txt) args in
+                  | 1 ->  let annot = annot_text preg_annot "esp" txt args in
                     fprintf oc "%s annotation: %S\n" comment annot
                   | 2 -> let lbl = new_label () in
                     fprintf oc "%a:\n" label lbl;
                     let sp = if Archi.ptr64 then "rsp" else "esp" in
-                    add_ais_annot lbl preg_ais_annot sp (camlstring_of_coqstring txt) args
+                    add_ais_annot lbl preg_ais_annot sp txt args
                   | _ -> assert false
                 end
           | EF_debug(kind, txt, targs) ->
@@ -866,7 +876,7 @@ module Target(System: SYSTEM):TARGET =
                                (P.to_int kind) (extern_atom txt) args
           | EF_inline_asm(txt, sg, clob) ->
               fprintf oc "%s begin inline assembly\n\t" comment;
-              print_inline_asm preg_asm oc (camlstring_of_coqstring txt) sg args res;
+              print_inline_asm preg_asm oc txt sg args res;
               fprintf oc "%s end inline assembly\n" comment
           | _ ->
               assert false
