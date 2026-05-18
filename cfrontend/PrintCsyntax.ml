@@ -23,6 +23,13 @@ open AST
 open! Ctypes
 open Cop
 open Csyntax
+open Barocq2C
+
+type source_lang =
+  | Lang_barocq
+  | Lang_c
+
+let src : source_lang ref = ref Lang_c
 
 let name_unop = function
   | Onotbool -> "!"
@@ -142,6 +149,7 @@ let rec precedence = function
   | Eloc _ -> (16, NA)
   | Evar _ -> (16, NA)
   | Ederef _ -> (15, RtoL)
+  | Eindex _ -> (16, LtoR) (* TODO : check precedence of array access *)
   | Efield _ -> (16, LtoR)
   | Eval _ -> (16, NA)
   | Evalof(l, _) -> precedence l
@@ -178,6 +186,12 @@ let print_typed_value p v ty =
   match v, ty with
   | Vint n, Ctypes.Tint(I32, Unsigned, _) ->
       fprintf p "%luU" (camlint_of_coqint n)
+  | Vint n, Ctypes.Tenum(eid, _) ->
+      if !src = Lang_barocq then
+        match Hashtbl.find_opt enum_constr_names (eid, n) with
+          | Some constr -> fprintf p "%s" (extern_atom constr)
+          | None -> fprintf p "%luU" (camlint_of_coqint n)
+      else fprintf p "%luU" (camlint_of_coqint n)
   | Vint n, _ ->
       fprintf p "%ld" (camlint_of_coqint n)
   | Vfloat f, _ ->
@@ -195,15 +209,22 @@ let print_typed_value p v ty =
 
 let print_value p v = print_typed_value p v Tvoid
 
+let is_evalof e =
+  match e with
+  | Evalof _ -> true
+  | _ -> false
+
 let rec expr p (prec, e) =
   let (prec', assoc) = precedence e in
   let (prec1, prec2) =
     if assoc = LtoR
     then (prec', prec' + 1)
     else (prec' + 1, prec') in
-  if prec' < prec
-  then fprintf p "@[<hov 2>("
-  else fprintf p "@[<hov 2>";
+  if not (is_evalof e) then begin
+    if prec' < prec
+    then fprintf p "@[<hov 2>("
+    else fprintf p "@[<hov 2>"
+  end;
   begin match e with
   | Eloc(b, ofs, _, _) ->
       fprintf p "<loc%a>" !print_pointer_hook (b, ofs)
@@ -211,6 +232,9 @@ let rec expr p (prec, e) =
       fprintf p "%s" (extern_atom id)
   | Ederef(a1, _) ->
       fprintf p "*%a" expr (prec', a1)
+  | Eindex(a1,a2,_) ->
+      fprintf p "%a[%a]"
+                 expr (prec', a1)  expr (0, a2)
   | Efield(a1, f, _) ->
       fprintf p "%a.%s" expr (prec', a1) (extern_atom f)
   | Evalof(l, _) ->
@@ -257,14 +281,14 @@ let rec expr p (prec, e) =
                 exprlist (true, args)
   | Ebuiltin(EF_annot(_,txt, _), _, args, _) ->
       fprintf p "__builtin_annot@[<hov 1>(%S%a)@]"
-                (camlstring_of_coqstring txt) exprlist (false, args)
+                txt exprlist (false, args)
   | Ebuiltin(EF_annot_val(_,txt, _), _, args, _) ->
       fprintf p "__builtin_annot_intval@[<hov 1>(%S%a)@]"
-                (camlstring_of_coqstring txt) exprlist (false, args)
+                txt exprlist (false, args)
   | Ebuiltin(EF_external(id, sg), _, args, _) ->
-      fprintf p "%s@[<hov 1>(%a)@]" (camlstring_of_coqstring id) exprlist (true, args)
+      fprintf p "%s@[<hov 1>(%a)@]" id exprlist (true, args)
   | Ebuiltin(EF_runtime(id, sg), _, args, _) ->
-      fprintf p "%s@[<hov 1>(%a)@]" (camlstring_of_coqstring id) exprlist (true, args)
+      fprintf p "%s@[<hov 1>(%a)@]" id exprlist (true, args)
   | Ebuiltin(EF_inline_asm(txt, sg, clob), _, args, _) ->
       extended_asm p txt None args clob
   | Ebuiltin(EF_debug(kind,txt,_),_,args,_) ->
@@ -272,13 +296,15 @@ let rec expr p (prec, e) =
         (P.to_int kind) (extern_atom txt) exprlist (false,args)
   | Ebuiltin(EF_builtin(name, _), _, args, _) ->
       fprintf p "%s@[<hov 1>(%a)@]"
-                (camlstring_of_coqstring name) exprlist (true, args)
+                name exprlist (true, args)
   | Ebuiltin(_, _, args, _) ->
       fprintf p "<unknown builtin>@[<hov 1>(%a)@]" exprlist (true, args)
   | Eparen(a1, tycast, ty) ->
       fprintf p "(%s) %a" (name_type tycast) expr (prec', a1)
   end;
-  if prec' < prec then fprintf p ")@]" else fprintf p "@]"
+  if not (is_evalof e) then begin
+    if prec' < prec then fprintf p ")@]" else fprintf p "@]"
+  end
 
 and exprlist p (first, rl) =
   match rl with
@@ -289,7 +315,7 @@ and exprlist p (first, rl) =
       exprlist p (false, rl)
 
 and extended_asm p txt res args clob =
-  fprintf p "asm volatile (@[<hv 0>%S" (camlstring_of_coqstring txt);
+  fprintf p "asm volatile (@[<hv 0>%S" txt;
   fprintf p "@ :";
   begin match res with
   | None -> ()
@@ -306,9 +332,9 @@ and extended_asm p txt res args clob =
   begin match clob with
   | [] -> ()
   | c1 :: cl ->
-      fprintf p "@ : @[<hov 0>%S" (camlstring_of_coqstring c1);
+      fprintf p "@ : @[<hov 0>%S" c1;
       List.iter
-        (fun c -> fprintf p ",@ %S" (camlstring_of_coqstring c))
+        (fun c -> fprintf p ",@ %S" c)
         cl;
       fprintf p "@]"
   end;
@@ -322,7 +348,8 @@ let print_exprlist p el = exprlist p (true, el)
 let rec print_stmt p s =
   match s with
   | Sskip ->
-      fprintf p "/*skip*/;"
+      if !src = Lang_barocq then ()
+      else fprintf p "/*skip*/;"
   | Sdo e ->
       fprintf p "%a;" print_expr e
   | Ssequence(s1, s2) ->
@@ -357,7 +384,7 @@ let rec print_stmt p s =
   | Sswitch(e, cases) ->
       fprintf p "@[<v 2>switch (%a) {@ %a@;<0 -2>}@]"
               print_expr e
-              print_cases cases
+              print_cases (cases, (typeof e))
   | Sreturn None ->
       fprintf p "return;"
   | Sreturn (Some e) ->
@@ -367,23 +394,35 @@ let rec print_stmt p s =
   | Sgoto lbl ->
       fprintf p "goto %s;" (extern_atom lbl)
 
-and print_cases p cases =
+and print_cases p (cases, ty) =
   match cases with
   | LSnil ->
       ()
   | LScons(lbl, Sskip, rem) ->
       fprintf p "%a:@ %a"
-              print_case_label lbl
-              print_cases rem
+              print_case_label (lbl, ty)
+              print_cases (rem, ty)
   | LScons(lbl, s, rem) ->
       fprintf p "@[<v 2>%a:@ %a@]@ %a"
-              print_case_label lbl
+              print_case_label (lbl, ty)
               print_stmt s
-              print_cases rem
+              print_cases (rem, ty)
 
-and print_case_label p = function
+and print_case_label p (lbl, ty) =
+  match lbl with
   | None -> fprintf p "default"
-  | Some lbl -> fprintf p "case %s" (Z.to_string lbl)
+  | Some lbl ->
+      let lbl_str =
+        if !src = Lang_barocq then
+          match ty with
+          | Tenum (id, _) ->
+              let constr = Hashtbl.find enum_constr_names (id, lbl) in
+              extern_atom constr
+          | _ -> Z.to_string lbl
+        else
+          Z.to_string lbl
+      in
+      fprintf p "case %s" lbl_str
 
 and print_stmt_for p s =
   match s with
@@ -417,7 +456,8 @@ let name_function_parameters name_param fun_name params cconv =
   Buffer.contents b
 
 let print_function p id f =
-  fprintf p "%s@ "
+  fprintf p "%s%s@ "
+            (if !src = Lang_barocq then fundef_attribs id else "")
             (name_cdecl (name_function_parameters extern_atom
                              (extern_atom id) f.fn_params f.fn_callconv)
                         f.fn_return);
@@ -442,8 +482,10 @@ let print_fundef p id fd =
 let print_fundecl p id fd =
   match fd with
   | Ctypes.Internal f ->
-      let linkage = if C2C.atom_is_static id then "static" else "extern" in
-      fprintf p "%s %s;@ @ " linkage
+      let linkage =
+        if !src = Lang_barocq then fundecl_attribs id
+        else if C2C.atom_is_static id then "static " else "extern " in
+      fprintf p "%s%s;@ @ " linkage
                 (name_cdecl (extern_atom id) (Csyntax.type_of_function f))
   | _ -> ()
 
@@ -474,9 +516,14 @@ let print_init p = function
   | Init_space n -> fprintf p "/* skip %s */@ " (Z.to_string n)
   | Init_addrof(symb, ofs) ->
       let ofs = camlint_of_coqint ofs in
+      let prefix =
+        if !src = Lang_barocq && List.mem symb !glob_arrays
+        then ""
+        else "&"
+      in
       if ofs = 0l
-      then fprintf p "&%s" (extern_atom symb)
-      else fprintf p "(void *)((char *)&%s + %ld)" (extern_atom symb) ofs
+      then fprintf p "%s%s" prefix (extern_atom symb)
+      else fprintf p "(void *)((char *)%s%s + %ld)" prefix (extern_atom symb) ofs
 
 let print_composite_init p il =
   fprintf p "{@ ";
@@ -561,6 +608,8 @@ let define_composite p (Composite(id, su, m, a)) =
   fprintf p "@;<0 -2>};@]@ @ "
 
 let print_program p prog =
+  if !src = Lang_barocq then
+    fill_enum_constr_names prog.prog_types;
   fprintf p "@[<v 0>";
   List.iter (declare_composite p) prog.prog_types;
   List.iter (define_composite p) prog.prog_types;

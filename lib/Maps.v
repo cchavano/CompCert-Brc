@@ -1306,6 +1306,28 @@ Module PMap <: MAP.
     intros. unfold set. simpl. decEq. apply PTree.set2.
   Qed.
 
+  Definition combine (A B C: Type) (f: A -> B ->  C) (m1 : t A) (m2: t B) : t C :=
+    (f (fst m1) (fst m2), PTree.combine
+                            (fun x y => match x , y with
+                                        | None , None => None
+                                        | Some x, Some y => Some (f x y)
+                                        | Some x , None => Some (f x (fst m2))
+                                        | None   , Some y => Some (f (fst m1) y)
+                                        end) (snd m1) (snd m2)).
+
+
+  Lemma gcombine : forall (A B C: Type) (f: A -> B -> C) (m1: t A) (m2: t B),
+      forall i, get i (combine f m1 m2) = f (get i m1) (get i m2).
+  Proof.
+    unfold combine.
+    intros. unfold get. simpl.
+    rewrite PTree.gcombine by reflexivity.
+    destruct (PTree.get i (snd m1)).
+    destruct (PTree.get i (snd m2));auto.
+    destruct (PTree.get i (snd m2));auto.
+  Qed.
+
+
 End PMap.
 
 (** * An implementation of maps over any type that injects into type [positive] *)
@@ -1326,6 +1348,7 @@ Module IMap(X: INDEXED_TYPE).
   Definition get (A: Type) (i: X.t) (m: t A) := PMap.get (X.index i) m.
   Definition set (A: Type) (i: X.t) (v: A) (m: t A) := PMap.set (X.index i) v m.
   Definition map (A B: Type) (f: A -> B) (m: t A) : t B := PMap.map f m.
+  Definition combine (A B C: Type) (f: A -> B -> C) (m1: t A) (m2: t B) := PMap.combine f m1 m2.
 
   Lemma gi:
     forall (A: Type) (x: A) (i: X.t), get i (init x) = x.
@@ -1365,6 +1388,14 @@ Module IMap(X: INDEXED_TYPE).
   Proof.
     intros. unfold map, get. apply PMap.gmap.
   Qed.
+
+  Lemma gcombine:
+    forall (A B C: Type) (f: A -> B -> C) (i: X.t) (m1: t A) (m2: t B),
+    get i (combine f m1 m2) = f(get i m1)(get i m2).
+  Proof.
+    intros. unfold combine, get. apply PMap.gcombine.
+  Qed.
+
 
   Lemma set2:
     forall (A: Type) (i: elt) (x y: A) (m: t A),

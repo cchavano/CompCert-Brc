@@ -26,7 +26,7 @@ Require Initializers.
 Require ClightFromCe.
 
 (* Standard lib *)
-From Coq Require Import ExtrOcamlBasic ExtrOcamlString.
+From Coq Require Import ExtrOcamlBasic ExtrOcamlNativeString.
 
 (* Coqlib *)
 Extract Inlined Constant Coqlib.proj_sumbool => "(fun x -> x)".

@@ -793,7 +793,20 @@ Fixpoint step_expr (k: kind) (a: expr) (m: mem): reducts expr :=
       | None =>
           incontext (fun x => Ederef x ty) (step_expr RV r m)
       end
-  | LV, Efield r f ty =>
+  |  LV, Eindex r1 r2 ty =>
+      match is_val r1, is_val r2 with
+      | Some(v1, ty1), Some(v2, ty2) =>
+          do v <- sem_binary_operation ge Oadd v1 ty1 v2 ty2 m;
+          match v with
+            | Vptr b ofs  =>
+                topred (Lred "red_index" (Eloc b ofs Full ty) m)
+          |    _ => stuck
+          end
+      | _, _ =>
+         incontext2 (fun x => Eindex x r2 ty) (step_expr RV r1 m)
+                    (fun x => Eindex r1 x ty) (step_expr RV r2 m)
+      end
+| LV, Efield r f ty =>
       match is_val r with
       | Some(Vptr b ofs, ty') =>
           match ty' with
@@ -1029,6 +1042,8 @@ Definition invert_expr_prop (a: expr) (m: mem) : Prop :=
       \/ (e!x = None /\ Genv.find_symbol ge x = Some b)
   | Ederef (Eval v ty1) ty =>
       exists b, exists ofs, v = Vptr b ofs
+  | Eindex (Eval v1 ty1) (Eval v2 ty2) ty =>
+      exists b, exists ofs, sem_binary_operation ge Oadd v1 ty1 v2 ty2 m = Some (Vptr b ofs)
   | Eaddrof (Eloc b ofs bf ty1) ty =>
       bf = Full
   | Efield (Eval v ty1) f ty =>
@@ -1086,11 +1101,12 @@ Lemma lred_invert:
   forall l m l' m', lred ge e l m l' m' -> invert_expr_prop l m.
 Proof.
   induction 1; red; auto.
-  exists b; auto.
-  exists b; auto.
-  exists b; exists ofs; auto.
-  exists b; exists ofs; split; auto. exists co, delta, bf; auto.
-  exists b; exists ofs; split; auto. exists co, delta, bf; auto.
+  - exists b; auto.
+  - exists b; auto.
+  - exists b; exists ofs; auto.
+  - exists b; exists ofs ; auto.
+  - exists b; exists ofs; split; auto. exists co, delta, bf; auto.
+  - exists b; exists ofs; split; auto. exists co, delta, bf; auto.
 Qed.
 
 Lemma rred_invert:
@@ -1135,30 +1151,32 @@ Lemma invert_expr_context:
   ~exprlist_all_values (C a)).
 Proof.
   apply context_contextlist_ind; intros; try (exploit H0; [eauto|intros]); simpl.
-  auto.
-  destruct (C a); auto; contradiction.
-  destruct (C a); auto; contradiction.
-  destruct (C a); auto; contradiction.
-  destruct (C a); auto; contradiction.
-  destruct (C a); auto; contradiction.
-  destruct (C a); auto; contradiction.
-  destruct e1; auto; destruct (C a); auto; contradiction.
-  destruct (C a); auto; contradiction.
-  destruct (C a); auto; contradiction.
-  destruct (C a); auto; contradiction.
-  destruct (C a); auto; contradiction.
-  destruct (C a); auto; contradiction.
-  destruct e1; auto; destruct (C a); auto; contradiction.
-  destruct (C a); auto; contradiction.
-  destruct e1; auto; destruct (C a); auto; contradiction.
-  destruct (C a); auto; contradiction.
-  destruct (C a); auto; contradiction.
-  destruct e1; auto. intros. elim (H0 a m); auto.
-  intros. elim (H0 a m); auto.
-  destruct (C a); auto; contradiction.
-  destruct (C a); auto; contradiction.
-  red; intros. destruct (C a); auto.
-  red; intros. destruct e1; auto. elim (H0 a m); auto.
+  - auto.
+  - destruct (C a); auto; contradiction.
+  - destruct (C a); auto; contradiction.
+  - destruct e1; auto; destruct (C a); auto; contradiction.
+  - destruct (C a); auto; contradiction.
+  - destruct (C a); auto; contradiction.
+  - destruct (C a); auto; contradiction.
+  - destruct (C a); auto; contradiction.
+  - destruct (C a); auto; contradiction.
+  - destruct e1; auto; destruct (C a); auto; contradiction.
+  - destruct (C a); auto; contradiction.
+  - destruct (C a); auto; contradiction.
+  - destruct (C a); auto; contradiction.
+  - destruct (C a); auto; contradiction.
+  - destruct (C a); auto; contradiction.
+  - destruct e1; auto; destruct (C a); auto; contradiction.
+  - destruct (C a); auto; contradiction.
+  - destruct e1; auto; destruct (C a); auto; contradiction.
+  - destruct (C a); auto; contradiction.
+  - destruct (C a); auto; contradiction.
+  - destruct e1; auto. intros. elim (H0 a m); auto.
+  - intros. elim (H0 a m); auto.
+  - destruct (C a); auto; contradiction.
+  - destruct (C a); auto; contradiction.
+  - red; intros. destruct (C a); auto.
+  - red; intros. destruct e1; auto. elim (H0 a m); auto.
 Qed.
 
 Lemma imm_safe_t_inv:
@@ -1417,20 +1435,20 @@ with step_exprlist_sound:
   forall al m, list_reducts_ok al m (step_exprlist al m).
 Proof with (try (apply not_invert_ok; simpl; intro; myinv; intuition congruence; fail)).
   induction a; intros; simpl; destruct k; try (apply wrong_kind_ok; simpl; congruence).
-(* Eval *)
+- (* Eval *)
   split; intros. tauto. simpl; congruence.
-(* Evar *)
+- (* Evar *)
   destruct (e!x) as [[b ty']|] eqn:?.
   destruct (type_eq ty ty')...
   subst. apply topred_ok; auto. apply red_var_local; auto.
   destruct (Genv.find_symbol ge x) as [b|] eqn:?...
   apply topred_ok; auto. apply red_var_global; auto.
-(* Efield *)
+- (* Efield *)
   destruct (is_val a) as [[v ty'] | ] eqn:?.
   rewrite (is_val_inv _ _ _ Heqo).
   destruct v...
   destruct ty'...
-  (* top struct *)
+   (* top struct *)
   destruct (ge.(genv_cenv)!i0) as [co|] eqn:?...
   destruct (field_offset ge f (co_members co)) as [[delta bf]|] eqn:?...
   apply topred_ok; auto. eapply red_field_struct; eauto.
@@ -1440,7 +1458,7 @@ Proof with (try (apply not_invert_ok; simpl; intro; myinv; intuition congruence;
   apply topred_ok; auto. eapply red_field_union; eauto.
   (* in depth *)
   eapply incontext_ok; eauto.
-(* Evalof *)
+- (* Evalof *)
   destruct (is_loc a) as [[[[b ofs] bf] ty']  | ] eqn:?. rewrite (is_loc_inv _ _ _ _ _ Heqo).
   (* top *)
   destruct (type_eq ty ty')... subst ty'.
@@ -1450,27 +1468,37 @@ Proof with (try (apply not_invert_ok; simpl; intro; myinv; intuition congruence;
   apply not_invert_ok; simpl; intros; myinv. exploit do_deref_loc_complete; eauto. congruence.
   (* depth *)
   eapply incontext_ok; eauto.
-(* Ederef *)
+- (* Ederef *)
   destruct (is_val a) as [[v ty'] | ] eqn:?. rewrite (is_val_inv _ _ _ Heqo).
   (* top *)
   destruct v... apply topred_ok; auto. apply red_deref; auto.
   (* depth *)
   eapply incontext_ok; eauto.
-(* Eaddrof *)
+- destruct (is_val a1) as [[v1 ty1] | ] eqn:?.
+  destruct (is_val a2) as [[v2 ty2] | ] eqn:?.
+  rewrite (is_val_inv _ _ _ Heqo). rewrite (is_val_inv _ _ _ Heqo0).
+  destruct (sem_add ge v1 ty1 v2 ty2 m) as [v|] eqn:?...
+  destruct v...
+  apply topred_ok; auto.
+  eapply red_index;eauto.
+  (* depth *)
+  eapply incontext2_ok; eauto.
+  eapply incontext2_ok; eauto.
+-   (* Eaddrof *)
   destruct (is_loc a) as [[[[b ofs] bf ] ty'] | ] eqn:?. rewrite (is_loc_inv _ _ _ _ _ Heqo).
   (* top *)
   destruct bf... 
   apply topred_ok; auto. split. apply red_addrof; auto. exists w; constructor.
   (* depth *)
   eapply incontext_ok; eauto.
-(* unop *)
+- (* unop *)
   destruct (is_val a) as [[v ty'] | ] eqn:?. rewrite (is_val_inv _ _ _ Heqo).
   (* top *)
   destruct (sem_unary_operation op v ty' m) as [v'|] eqn:?...
   apply topred_ok; auto. split. apply red_unop; auto. exists w; constructor.
   (* depth *)
   eapply incontext_ok; eauto.
-(* binop *)
+- (* binop *)
   destruct (is_val a1) as [[v1 ty1] | ] eqn:?.
   destruct (is_val a2) as [[v2 ty2] | ] eqn:?.
   rewrite (is_val_inv _ _ _ Heqo). rewrite (is_val_inv _ _ _ Heqo0).
@@ -1480,14 +1508,14 @@ Proof with (try (apply not_invert_ok; simpl; intro; myinv; intuition congruence;
   (* depth *)
   eapply incontext2_ok; eauto.
   eapply incontext2_ok; eauto.
-(* cast *)
+- (* cast *)
   destruct (is_val a) as [[v ty'] | ] eqn:?. rewrite (is_val_inv _ _ _ Heqo).
   (* top *)
   destruct (sem_cast v ty' ty m) as [v'|] eqn:?...
   apply topred_ok; auto. split. apply red_cast; auto. exists w; constructor.
   (* depth *)
   eapply incontext_ok; eauto.
-(* seqand *)
+- (* seqand *)
   destruct (is_val a1) as [[v ty'] | ] eqn:?. rewrite (is_val_inv _ _ _ Heqo).
   (* top *)
   destruct (bool_val v ty' m) as [v'|] eqn:?... destruct v'.
@@ -1495,7 +1523,7 @@ Proof with (try (apply not_invert_ok; simpl; intro; myinv; intuition congruence;
   apply topred_ok; auto. split. eapply red_seqand_false; eauto. exists w; constructor.
   (* depth *)
   eapply incontext_ok; eauto.
-(* seqor *)
+- (* seqor *)
   destruct (is_val a1) as [[v ty'] | ] eqn:?. rewrite (is_val_inv _ _ _ Heqo).
   (* top *)
   destruct (bool_val v ty' m) as [v'|] eqn:?... destruct v'.
@@ -1503,18 +1531,18 @@ Proof with (try (apply not_invert_ok; simpl; intro; myinv; intuition congruence;
   apply topred_ok; auto. split. eapply red_seqor_false; eauto. exists w; constructor.
   (* depth *)
   eapply incontext_ok; eauto.
-(* condition *)
+- (* condition *)
   destruct (is_val a1) as [[v ty'] | ] eqn:?. rewrite (is_val_inv _ _ _ Heqo).
   (* top *)
   destruct (bool_val v ty' m) as [v'|] eqn:?...
   apply topred_ok; auto. split. eapply red_condition; eauto. exists w; constructor.
   (* depth *)
   eapply incontext_ok; eauto.
-(* sizeof *)
+- (* sizeof *)
   apply topred_ok; auto. split. apply red_sizeof. exists w; constructor.
-(* alignof *)
+- (* alignof *)
   apply topred_ok; auto. split. apply red_alignof. exists w; constructor.
-(* assign *)
+- (* assign *)
   destruct (is_loc a1) as [[[[b ofs] bf] ty1] | ] eqn:?.
   destruct (is_val a2) as [[v2 ty2] | ] eqn:?.
   rewrite (is_loc_inv _ _ _ _ _ Heqo). rewrite (is_val_inv _ _ _ Heqo0).
@@ -1528,7 +1556,7 @@ Proof with (try (apply not_invert_ok; simpl; intro; myinv; intuition congruence;
   (* depth *)
   eapply incontext2_ok; eauto.
   eapply incontext2_ok; eauto.
-(* assignop *)
+- (* assignop *)
   destruct (is_loc a1) as [[[[b ofs] bf] ty1] | ] eqn:?.
   destruct (is_val a2) as [[v2 ty2] | ] eqn:?.
   rewrite (is_loc_inv _ _ _ _ _ Heqo). rewrite (is_val_inv _ _ _ Heqo0).
@@ -1541,7 +1569,7 @@ Proof with (try (apply not_invert_ok; simpl; intro; myinv; intuition congruence;
   (* depth *)
   eapply incontext2_ok; eauto.
   eapply incontext2_ok; eauto.
-(* postincr *)
+- (* postincr *)
   destruct (is_loc a) as [[[[b ofs] bf] ty'] | ] eqn:?. rewrite (is_loc_inv _ _ _ _ _ Heqo).
   (* top *)
   destruct (type_eq ty' ty)... subst ty'.
@@ -1551,14 +1579,14 @@ Proof with (try (apply not_invert_ok; simpl; intro; myinv; intuition congruence;
   apply not_invert_ok; simpl; intros; myinv. exploit do_deref_loc_complete; eauto. congruence.
   (* depth *)
   eapply incontext_ok; eauto.
-(* comma *)
+- (* comma *)
   destruct (is_val a1) as [[v ty'] | ] eqn:?. rewrite (is_val_inv _ _ _ Heqo).
   (* top *)
   destruct (type_eq (typeof a2) ty)... subst ty.
   apply topred_ok; auto. split. apply red_comma; auto. exists w; constructor.
   (* depth *)
   eapply incontext_ok; eauto.
-(* call *)
+- (* call *)
   destruct (is_val a) as [[vf tyf] | ] eqn:?.
   destruct (is_val_list rargs) as [vtl | ] eqn:?.
   rewrite (is_val_inv _ _ _ Heqo). exploit is_val_list_all_values; eauto. intros ALLVAL.
@@ -1577,7 +1605,7 @@ Proof with (try (apply not_invert_ok; simpl; intro; myinv; intuition congruence;
   (* depth *)
   eapply incontext2_list_ok; eauto.
   eapply incontext2_list_ok; eauto.
-(* builtin *)
+- (* builtin *)
   destruct (is_val_list rargs) as [vtl | ] eqn:?.
   exploit is_val_list_all_values; eauto. intros ALLVAL.
   (* top *)
@@ -1596,9 +1624,9 @@ Proof with (try (apply not_invert_ok; simpl; intro; myinv; intuition congruence;
   (* depth *)
   eapply incontext_list_ok; eauto.
 
-(* loc *)
+- (* loc *)
   split; intros. tauto. simpl; congruence.
-(* paren *)
+- (* paren *)
   destruct (is_val a) as [[v ty'] | ] eqn:?. rewrite (is_val_inv _ _ _ Heqo).
   (* top *)
   destruct (sem_cast v ty' tycast m) as [v'|] eqn:?...
@@ -1606,10 +1634,10 @@ Proof with (try (apply not_invert_ok; simpl; intro; myinv; intuition congruence;
   (* depth *)
   eapply incontext_ok; eauto.
 
-  induction al; simpl; intros.
-(* nil *)
+-  induction al; simpl; intros.
+ + (* nil *)
   split; intros. tauto. simpl; congruence.
-(* cons *)
+ + (* cons *)
   eapply incontext2_list_ok'; eauto.
 Qed.
 
@@ -1638,9 +1666,12 @@ Proof.
   rewrite H; rewrite H0. econstructor; eauto.
 (* deref *)
   econstructor; eauto.
-(* field struct *)
+(* index *)
+  econstructor; eauto.
+  simpl in H. rewrite H. reflexivity.
+-   (* field struct *)
   rewrite H, H0; econstructor; eauto.
-(* field union *)
+- (* field union *)
   rewrite H, H0; econstructor; eauto.
 Qed.
 
@@ -1783,81 +1814,88 @@ with step_exprlist_context:
   forall a m, reducts_incl C (step_expr from a m) (step_exprlist (C a) m).
 Proof.
   induction 1; simpl; intros.
-(* top *)
+  (* top *)
   red. destruct (step_expr k a m); auto.
   try (* no eta in 8.3 *)
    (intros;
     replace (fun x => C1 x) with C1 by (apply extensionality; auto);
     auto).
-(* deref *)
+- (* deref *)
   eapply reducts_incl_trans with (C' := fun x => Ederef x ty); eauto.
   destruct (is_val (C a)) as [[v ty']|] eqn:?; eauto.
-(* field *)
+- (* index left *)
+  eapply reducts_incl_trans with (C' := fun x => Eindex x e2 ty); eauto.
+  destruct (is_val (C a)) as [[v ty']|] eqn:?; eauto.
+- (* index right *)
+  eapply reducts_incl_trans with (C' := fun x => Eindex e1 x ty); eauto.
+  destruct (is_val e1) as [[v1 ty1]|] eqn:?; eauto.
+  destruct (is_val (C a)) as [[v2 ty2]|] eqn:?; eauto.
+- (* field *)
   eapply reducts_incl_trans with (C' := fun x => Efield x f ty); eauto.
   destruct (is_val (C a)) as [[v ty']|] eqn:?; eauto.
-(* valof *)
+- (* valof *)
   eapply reducts_incl_trans with (C' := fun x => Evalof x ty); eauto.
   destruct (is_loc (C a)) as [[[[b ofs] bf] ty']|] eqn:?; eauto.
-(* addrof *)
+- (* addrof *)
   eapply reducts_incl_trans with (C' := fun x => Eaddrof x ty); eauto.
   destruct (is_loc (C a)) as [[[[b ofs] bf] ty']|] eqn:?; eauto.
-(* unop *)
+- (* unop *)
   eapply reducts_incl_trans with (C' := fun x => Eunop op x ty); eauto.
   destruct (is_val (C a)) as [[v ty']|] eqn:?; eauto.
-(* binop left *)
+- (* binop left *)
   eapply reducts_incl_trans with (C' := fun x => Ebinop op x e2 ty); eauto.
   destruct (is_val (C a)) as [[v ty']|] eqn:?; eauto.
-(* binop right *)
+- (* binop right *)
   eapply reducts_incl_trans with (C' := fun x => Ebinop op e1 x ty); eauto.
   destruct (is_val e1) as [[v1 ty1]|] eqn:?; eauto.
   destruct (is_val (C a)) as [[v2 ty2]|] eqn:?; eauto.
-(* cast *)
+- (* cast *)
   eapply reducts_incl_trans with (C' := fun x => Ecast x ty); eauto.
   destruct (is_val (C a)) as [[v ty']|] eqn:?; eauto.
-(* seqand *)
+- (* seqand *)
   eapply reducts_incl_trans with (C' := fun x => Eseqand x r2 ty); eauto.
   destruct (is_val (C a)) as [[v ty']|] eqn:?; eauto.
-(* seqor *)
+- (* seqor *)
   eapply reducts_incl_trans with (C' := fun x => Eseqor x r2 ty); eauto.
   destruct (is_val (C a)) as [[v ty']|] eqn:?; eauto.
-(* condition *)
+- (* condition *)
   eapply reducts_incl_trans with (C' := fun x => Econdition x r2 r3 ty); eauto.
   destruct (is_val (C a)) as [[v ty']|] eqn:?; eauto.
-(* assign left *)
+- (* assign left *)
   eapply reducts_incl_trans with (C' := fun x => Eassign x e2 ty); eauto.
   destruct (is_loc (C a)) as [[[[b ofs] bf] ty']|] eqn:?; eauto.
-(* assign right *)
+- (* assign right *)
   eapply reducts_incl_trans with (C' := fun x => Eassign e1 x ty); eauto.
   destruct (is_loc e1) as [[[[b ofs] bf] ty1]|] eqn:?; eauto.
   destruct (is_val (C a)) as [[v2 ty2]|] eqn:?; eauto.
-(* assignop left *)
+- (* assignop left *)
   eapply reducts_incl_trans with (C' := fun x => Eassignop op x e2 tyres ty); eauto.
   destruct (is_loc (C a)) as [[[[b ofs] bf] ty']|] eqn:?; eauto.
-(* assignop right *)
+- (* assignop right *)
   eapply reducts_incl_trans with (C' := fun x => Eassignop op e1 x tyres ty); eauto.
   destruct (is_loc e1) as [[[[b ofs] bf] ty1]|] eqn:?; eauto.
   destruct (is_val (C a)) as [[v2 ty2]|] eqn:?; eauto.
-(* postincr *)
+- (* postincr *)
   eapply reducts_incl_trans with (C' := fun x => Epostincr id x ty); eauto.
   destruct (is_loc (C a)) as [[[[b ofs] bf] ty']|] eqn:?; eauto.
-(* call left *)
+- (* call left *)
   eapply reducts_incl_trans with (C' := fun x => Ecall x el ty); eauto.
   destruct (is_val (C a)) as [[v ty']|] eqn:?; eauto.
-(* call right *)
+- (* call right *)
   eapply reducts_incl_trans with (C' := fun x => Ecall e1 x ty). apply step_exprlist_context. auto.
   destruct (is_val e1) as [[v1 ty1]|] eqn:?; eauto.
   destruct (is_val_list (C a)) as [vl|] eqn:?; eauto.
-(* builtin *)
+- (* builtin *)
   eapply reducts_incl_trans with (C' := fun x => Ebuiltin ef tyargs x ty). apply step_exprlist_context. auto.
   destruct (is_val_list (C a)) as [vl|] eqn:?; eauto.
-(* comma *)
+- (* comma *)
   eapply reducts_incl_trans with (C' := fun x => Ecomma x e2 ty); eauto.
   destruct (is_val (C a)) as [[v ty']|] eqn:?; eauto.
-(* paren *)
+- (* paren *)
   eapply reducts_incl_trans with (C' := fun x => Eparen x tycast ty); eauto.
   destruct (is_val (C a)) as [[v ty']|] eqn:?; eauto.
 
-  induction 1; simpl; intros.
+-   induction 1; simpl; intros.
 (* cons left *)
   eapply reducts_incl_trans with (C' := fun x => Econs x el).
   apply step_expr_context; eauto. eauto.

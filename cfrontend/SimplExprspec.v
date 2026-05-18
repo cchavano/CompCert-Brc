@@ -73,7 +73,17 @@ Inductive tr_expr: temp_env -> destination -> Csyntax.expr -> list statement -> 
       tr_expr le For_val e1 sl1 a1 tmp ->
       tr_expr le dst (Csyntax.Ederef e1 ty)
               (sl1 ++ final dst (Ederef' a1 ty)) (Ederef' a1 ty) tmp
-  | tr_field: forall le dst e1 f ty sl1 a1 tmp,
+| tr_index :
+  forall le dst e1 e2 ty sl1 a1 tmp1 sl2 a2 tmp2 tmp,
+      tr_expr le For_val e1 sl1 a1 tmp1 ->
+      tr_expr le For_val e2 sl2 a2 tmp2 ->
+      list_disjoint tmp1 tmp2 -> incl tmp1 tmp -> incl tmp2 tmp ->
+      tr_expr le dst (Csyntax.Eindex e1 e2 ty)
+        (sl1 ++ sl2 ++ final dst
+           (Ederef' (Ebinop Oadd a1 a2 (Tpointer ty noattr)) ty))
+        (Ederef' (Ebinop Oadd a1 a2 (Tpointer ty noattr)) ty)
+        tmp
+| tr_field: forall le dst e1 f ty sl1 a1 tmp,
       tr_expr le For_val e1 sl1 a1 tmp ->
       tr_expr le dst (Csyntax.Efield e1 f ty)
               (sl1 ++ final dst (Efield a1 f ty)) (Efield a1 f ty) tmp
@@ -883,6 +893,12 @@ Opaque makeif.
 - (* deref *)
   monadInv H0. exploit H; eauto. intros [tmp [A B]]. UseFinish.
   econstructor; split; eauto. intros; apply tr_expr_add_dest. constructor; auto.
+- monadInv H1. exploit H; eauto. intros [tmp1 [A B]].
+  exploit H0; eauto. intros [tmp2 [C D]]. UseFinish.
+  exists (tmp1 ++ tmp2); split.
+  intros; apply tr_expr_add_dest. econstructor; eauto with gensym.
+  eauto with gensym.
+
 - (* addrof *)
   monadInv H0. exploit H; eauto. intros [tmp [A B]]. UseFinish.
   econstructor; split; eauto. intros; apply tr_expr_add_dest. econstructor; eauto.

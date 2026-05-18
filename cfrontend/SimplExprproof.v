@@ -180,6 +180,9 @@ Proof.
     intros. destruct H; subst dst; auto.
   apply tr_expr_exprlist; intros; simpl in *; try discriminate; auto.
 - rewrite H0; auto. simpl; auto.
+- (* index *)
+  destruct (andb_prop _ _ H7). rewrite H0; auto. rewrite H2; auto.
+  simpl; auto.
 - rewrite H0; auto. simpl; auto.
 - destruct H1; congruence.
 - destruct (andb_prop _ _ H6). inv H1.
@@ -377,7 +380,15 @@ Opaque makeif.
     rewrite symbols_preserved; auto.
 - (* deref *)
   exploit H0; eauto. intros [A [B C]]. subst sl1.
-  split; auto. split. rewrite typeof_Ederef'; auto. apply eval_Ederef'; auto. 
+  split; auto. split. rewrite typeof_Ederef'; auto. apply eval_Ederef'; auto.
+- (* index *)
+  exploit H0; eauto. intros [A [B C]].
+  exploit H2; eauto. intros [D [E F]].
+  subst sl1 sl2; simpl.
+  split; auto. split; auto.
+  assert (eval_expr tge e le m (Ebinop Oadd a1 a2 (Tpointer ty noattr)) (Vptr b ofs)).
+  { econstructor; eauto. rewrite comp_env_preserved; congruence. }
+  econstructor; eauto.
 - (* field struct *)
   rewrite <- comp_env_preserved in *.
   exploit H0; eauto. intros [A [B C]]. subst sl1.
@@ -504,6 +515,21 @@ Ltac UNCHANGED :=
   exploit H0; eauto. intros [dst' [sl1' [sl2' [a' [tmp' [P [Q [R S]]]]]]]].
   TR. subst sl1; rewrite app_ass; eauto. auto.
   intros. rewrite <- app_ass. econstructor; eauto.
+- (* index left *)
+  inv H1.
+  exploit H0; eauto. intros [dst' [sl1' [sl2' [a' [tmp' [P [Q [R S]]]]]]]].
+  TR. subst sl1. rewrite app_ass. eauto.
+  red; auto.
+  intros. rewrite <- app_ass. econstructor; eauto.
+  eapply tr_expr_invariant; eauto. UNCHANGED.
+- (* index right *)
+  inv H2.
+  assert (sl1 = nil) by (eapply tr_simple_expr_nil; eauto). subst sl1; simpl.
+  exploit H1; eauto. intros [dst' [sl1' [sl2' [a' [tmp' [P [Q [R S]]]]]]]].
+  TR. subst sl2. rewrite app_ass. eauto.
+  red; auto.
+  intros. rewrite <- app_ass. change (sl3 ++ sl2') with (nil ++ sl3 ++ sl2'). rewrite app_ass. econstructor; eauto.
+  eapply tr_expr_invariant; eauto. UNCHANGED.
 - (* field *)
   inv H1.
   exploit H0. eauto. intros [dst' [sl1' [sl2' [a' [tmp' [P [Q [R S]]]]]]]].
@@ -1459,6 +1485,7 @@ Fixpoint esize (a: Csyntax.expr) : nat :=
   | Csyntax.Eloc _ _ _ _ => 1%nat
   | Csyntax.Evar _ _ => 1%nat
   | Csyntax.Ederef r1 _ => S(esize r1)
+  | Csyntax.Eindex r1 r2 _ => S(esize r1 + esize r2)%nat
   | Csyntax.Efield l1 _ _ => S(esize l1)
   | Csyntax.Eval _ _ => O
   | Csyntax.Evalof l1 _ => S(esize l1)
