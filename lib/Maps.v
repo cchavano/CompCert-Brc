@@ -78,13 +78,7 @@ Module Type TREE.
   Parameter beq: forall (A: Type), (A -> A -> bool) -> t A -> t A -> bool.
   Axiom beq_correct:
     forall (A: Type) (eqA: A -> A -> bool) (t1 t2: t A),
-    beq eqA t1 t2 = true <->
-    (forall (x: elt),
-     match get x t1, get x t2 with
-     | None, None => True
-     | Some y1, Some y2 => eqA y1 y2 = true
-     | _, _ => False
-    end).
+    beq eqA t1 t2 = true <-> forall x, option_rel (fun x y => eqA x y = true) (get x t1) (get x t2).
 
   (** Applying a function to all data of a tree. *)
   Parameter map:
@@ -725,17 +719,11 @@ Module PTree <: TREE.
 
     Theorem beq_correct:
       forall m1 m2,
-      beq m1 m2 = true <->
-      (forall (x: elt),
-       match get x m1, get x m2 with
-       | None, None => True
-       | Some y1, Some y2 => beqA y1 y2 = true
-       | _, _ => False
-       end).
+      beq m1 m2 = true <-> forall x, option_rel (fun x y => beqA x y = true) (get x m1) (get x m2).
     Proof.
       intros. rewrite beq_correct_bool. unfold beq_optA. split; intros.
-    - specialize (H x). destruct (get x m1), (get x m2); intuition congruence.
-    - specialize (H x). destruct (get x m1), (get x m2); intuition auto.
+    - specialize (H x). destruct (get x m1), (get x m2); try discriminate;now constructor.
+    - specialize (H x). inv H; trivial.
     Qed.
 
   End BOOLEAN_EQUALITY.
@@ -1327,6 +1315,25 @@ Module PMap <: MAP.
     destruct (PTree.get i (snd m2));auto.
   Qed.
 
+  Definition beq {A:Type} (beqA : A -> A -> bool) (m1 m2:t A) :=
+    if beqA (fst m1) (fst m2) then  PTree.beq beqA (snd m1) (snd m2) else false.
+
+  (** [beq_correct] is weaker than [PTree.beq_correct].
+      To get completeness, the whole algorithm needs to be rewritten
+      to handle default values *)
+  Lemma beq_correct:
+    forall (A: Type) (eqA: A -> A -> bool) (t1 t2: t A),
+      beq eqA t1 t2 = true -> forall x, eqA (get x t1) (get x t2) = true.
+  Proof.
+    intros *.
+    unfold beq.
+    destruct (eqA (fst t1) (fst t2)) eqn:FST; try discriminate.
+    rewrite PTree.beq_correct.
+    intros G x.
+    specialize (G x).
+    unfold get.
+    inv G; auto.
+  Qed.
 
 End PMap.
 
@@ -1349,6 +1356,14 @@ Module IMap(X: INDEXED_TYPE).
   Definition set (A: Type) (i: X.t) (v: A) (m: t A) := PMap.set (X.index i) v m.
   Definition map (A B: Type) (f: A -> B) (m: t A) : t B := PMap.map f m.
   Definition combine (A B C: Type) (f: A -> B -> C) (m1: t A) (m2: t B) := PMap.combine f m1 m2.
+  Definition beq (A:Type) (eqA : A -> A -> bool) (m1 m2: t A) := PMap.beq eqA m1 m2.
+
+  Lemma beq_correct:
+    forall (A: Type) (eqA: A -> A -> bool) (t1 t2: t A),
+      beq eqA t1 t2 = true -> forall x, eqA (get x t1) (get x t2) = true.
+  Proof.
+    intros. unfold get. apply PMap.beq_correct; auto.
+  Qed.
 
   Lemma gi:
     forall (A: Type) (x: A) (i: X.t), get i (init x) = x.
@@ -1559,13 +1574,7 @@ Module ITree(X: INDEXED_TYPE).
   Definition beq: forall (A: Type), (A -> A -> bool) -> t A -> t A -> bool := PTree.beq.
   Theorem beq_sound:
     forall (A: Type) (eqA: A -> A -> bool) (t1 t2: t A),
-    beq eqA t1 t2 = true ->
-    forall (x: elt),
-     match get x t1, get x t2 with
-     | None, None => True
-     | Some y1, Some y2 => eqA y1 y2 = true
-     | _, _ => False
-    end.
+    beq eqA t1 t2 = true -> forall x, option_rel (fun x y => eqA x y = true) (get x t1) (get x t2).
   Proof.
     unfold beq, get. intros. rewrite PTree.beq_correct in H. apply H.
   Qed.
@@ -1858,9 +1867,9 @@ Proof.
   + cut (T.beq beqA m1 m2 = true). congruence.
     rewrite for_all_correct in *. rewrite T.beq_correct; intros.
     destruct (T.get x m1) as [a1|] eqn:X1.
-    generalize (F1 _ _ X1). unfold p1. destruct (T.get x m2); congruence.
+    generalize (F1 _ _ X1). unfold p1. destruct (T.get x m2); try congruence; constructor;auto.
     destruct (T.get x m2) as [a2|] eqn:X2; auto.
-    generalize (F2 _ _ X2). unfold p2. rewrite X1. congruence.
+    generalize (F2 _ _ X2). unfold p2. rewrite X1. discriminate. constructor.
   + rewrite for_all_false in F2. destruct F2 as (x & a & P & Q).
     exists x. rewrite P. unfold p2 in Q. destruct (T.get x m1); auto.
   + rewrite for_all_false in F1. destruct F1 as (x & a & P & Q).
@@ -1869,7 +1878,7 @@ Proof.
   destruct H as [x P].
   destruct (T.beq beqA m1 m2) eqn:E; auto.
   rewrite T.beq_correct in E.
-  generalize (E x). destruct (T.get x m1); destruct (T.get x m2); tauto || congruence.
+  generalize (E x). intro OR; destruct (T.get x m1); destruct (T.get x m2); inv OR; tauto || congruence.
 Qed.
 
 End BOOLEAN_EQUALITY.
@@ -1924,7 +1933,8 @@ Next Obligation.
   rename Heq_anonymous into B.
   symmetry in B. rewrite T.beq_correct in B.
   red; intros. generalize (B x).
-  destruct (T.get x m1); destruct (T.get x m2); auto.
+  intro OR;
+  destruct (T.get x m1); destruct (T.get x m2); inv OR; auto.
   intros. eapply proj_sumbool_true; eauto.
 Qed.
 Next Obligation.
@@ -1932,7 +1942,9 @@ Next Obligation.
   apply T.beq_correct; intros.
   generalize (H x).
   destruct (T.get x m1); destruct (T.get x m2); try tauto.
+  constructor.
   intros. apply proj_sumbool_is_true; auto.
+  constructor.
   unfold equiv, complement in H0. congruence.
 Qed.
 

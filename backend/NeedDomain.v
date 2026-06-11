@@ -2186,11 +2186,12 @@ Proof.
 - InvBooleans. rewrite ISet.beq_spec in H0. rewrite PTree.beq_correct in H1.
   split; intros L; inv L; constructor; intros.
 + rewrite <- H0. eauto.
-+ specialize (H1 id). rewrite H2 in H1. destruct gl1!id as [iv1|] eqn: NG; try contradiction.
-  rewrite ISet.beq_spec in H1. rewrite <- H1. eauto.
++ specialize (H1 id). rewrite H2 in H1.
+  inv H1.
+  rewrite ISet.beq_spec in H5. rewrite <- H5. eauto.
 + rewrite H0. eauto.
-+ specialize (H1 id). rewrite H2 in H1. destruct gl2!id as [iv2|] eqn: NG; try contradiction.
-  rewrite ISet.beq_spec in H1. rewrite H1. eauto.
++ specialize (H1 id). rewrite H2 in H1. inv H1.
+  rewrite ISet.beq_spec in H5. rewrite H5. eauto.
 Qed.
 
 End LOCATIONS.

@@ -118,9 +118,9 @@ Lemma beq_correct: forall x y, beq x y = true -> eq x y.
 Proof.
   unfold beq; intros; red; intros. unfold get.
   rewrite PTree.beq_correct in H. specialize (H p).
-  destruct (x!p); destruct (y!p); intuition.
-  apply L.beq_correct; auto.
+  inv H.
   apply L.eq_refl.
+  apply L.beq_correct; auto.
 Qed.
 
 Definition ge (x y: t) : Prop :=
@@ -485,9 +485,9 @@ Proof.
   apply eq_refl.
   red; intro; simpl.
   rewrite PTree.beq_correct in H. generalize (H p).
-  destruct (t0!p); destruct (t1!p); intuition.
-  apply L.beq_correct; auto.
+  intro OR ; inv OR.
   apply L.eq_refl.
+  apply L.beq_correct; auto.
 Qed.
 
 Definition ge (x y: t) : Prop :=

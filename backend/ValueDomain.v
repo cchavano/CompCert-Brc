@@ -4158,9 +4158,9 @@ Proof.
 - assert (A: forall i, ZTree.get i (ab_contents ab1) = ZTree.get i (ab_contents ab2)).
   {
     intros. exploit ZTree.beq_sound; eauto. instantiate (1 := i).
-    destruct (ab_contents ab1)##i, (ab_contents ab2)##i; intros; try contradiction.
+    intro OR ; inv OR. reflexivity.
     InvBooleans; subst; auto.
-    auto. }
+  }
   intros. unfold ablock_load. rewrite A, H.
   destruct (ab_contents ab2)##i; auto.
 Qed.
@@ -4734,13 +4734,15 @@ Proof.
   unfold mbeq; intros. InvBooleans. rewrite PTree.beq_correct in H1.
   split; intros M; inv M; constructor; intros.
 - erewrite <- bbeq_sound; eauto.
-- specialize (H1 id). rewrite H4 in H1. destruct (am_glob m1)!id eqn:G; try contradiction.
+- specialize (H1 id). rewrite H4 in H1.
+  inv H1.
   erewrite <- bbeq_sound; eauto.
 - rewrite <- H; eauto.
 - rewrite <- H0; eauto.
 - auto.
 - erewrite bbeq_sound; eauto.
-- specialize (H1 id). rewrite H4 in H1. destruct (am_glob m2)!id eqn:G; try contradiction.
+- specialize (H1 id). rewrite H4 in H1.
+  inv H1.
   erewrite bbeq_sound; eauto.
 - rewrite H; eauto.
 - rewrite H0; eauto.
