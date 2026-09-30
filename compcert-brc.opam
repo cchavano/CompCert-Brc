@@ -42,4 +42,4 @@ build: [
   [make "-j%{jobs}%" {ocaml:version >= "4.06"}]
 ]
 install: [make "install"]
-dev-repo: "https://github.com/cchavano/CompCert-Brc.git"
+dev-repo: "git+https://github.com/cchavano/CompCert-Brc.git"
