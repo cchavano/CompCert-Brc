@@ -1,12 +1,12 @@
 opam-version: "2.0"
-name: "CompCert-Ce"
-version: "3.17-20260611ce"
+name: "CompCert-Brc"
+version: "3.17-brc1"
 synopsis: "The CompCert C compiler for Barocq (64 bit)"
 maintainer: "Michael Soegtrop and Xavier Leroy"
 authors: "Xavier Leroy <xavier.leroy@college-de-france.fr>"
 license: "INRIA Non-Commercial License Agreement"
-homepage: "https://gitlab.inria.fr/cchavano/compcert-ce"
-bug-reports: "https://gitlab.inria.fr/cchavano/compcert-ce/-/issues"
+homepage: "https://github.com/cchavano/CompCert-Brc"
+bug-reports: "https://github.com/cchavano/CompCert-Brc/issues"
 depends: [
   "coq" {>= "8.15.0" & < "9.2~"}
   "menhir" {>= "20200624" & != "20260122" & != "dev"}
@@ -42,4 +42,4 @@ build: [
   [make "-j%{jobs}%" {ocaml:version >= "4.06"}]
 ]
 install: [make "install"]
-dev-repo: "git+https://gitlab.inria.fr/cchavano/compcert-ce.git"
+dev-repo: "https://github.com/cchavano/CompCert-Brc.git"
