@@ -23,7 +23,7 @@ jobs:
       options: --user root
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: true
       - name: OS dependencies
@@ -51,12 +51,13 @@ jobs:
       configopts: -ignore-coq-version -ignore-ocaml-version
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: true
       - name: OS dependencies
         run: |
-          brew install coq ocaml menhir
+          brew install coq ocaml
+          brew install --build-from-source menhir  # temporary workaround
       - name: Configure
         run: tools/runner.sh configure
       - name: Build
